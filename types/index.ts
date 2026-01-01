@@ -60,3 +60,77 @@ export interface PaginationInfo {
   totalPages: number;
   hasMore: boolean;
 }
+
+// Phase 2 Types
+
+export type CaptionTone = "artistic" | "casual" | "professional" | "inspirational";
+export type CaptionLength = "short" | "medium" | "long";
+export type PostType = "SINGLE" | "CAROUSEL";
+export type PostStatus = "DRAFT" | "READY" | "SCHEDULED" | "PUBLISHED";
+
+export interface PostData {
+  id: string;
+  type: PostType;
+  images: PostImageData[];
+  caption: string | null;
+  hashtags: string[];
+  captionTone: string | null;
+  captionLanguage: string | null;
+  status: PostStatus;
+  createdAt: string;
+  updatedAt: string;
+  scheduledAt: string | null;
+}
+
+export interface PostImageData {
+  id: string;
+  imageId: string;
+  image: ImageData;
+  order: number;
+}
+
+export interface HashtagGroupData {
+  id: string;
+  name: string;
+  hashtags: string[];
+  createdAt: string;
+}
+
+export interface Hashtag {
+  tag: string;
+  category: "trending" | "niche" | "branded";
+  isBanned: boolean;
+  selected?: boolean;
+}
+
+export interface CaptionGeneratorParams {
+  prompt: string;
+  imageAnalysis?: string;
+  tone: CaptionTone;
+  length: CaptionLength;
+  includeEmojis: boolean;
+  includeQuestion: boolean;
+  includeCTA: boolean;
+  language: string;
+  provider?: "openai" | "gemini";
+}
+
+export interface HashtagGeneratorParams {
+  prompt: string;
+  caption?: string;
+  count: number;
+  categories: {
+    trending: boolean;
+    niche: boolean;
+    branded: boolean;
+  };
+  provider?: "openai" | "gemini";
+}
+
+export interface GenerationMetadata {
+  provider: "openai" | "gemini";
+  model: string;
+  latencyMs: number;
+  inputTokens: number;
+  outputTokens: number;
+}

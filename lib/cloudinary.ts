@@ -62,9 +62,11 @@ export function generatePrivateThumbnailUrl(publicId: string): string {
 export function generateProxyUrls(imageId: string): {
   url: string;
   thumbnailUrl: string;
+  secureUrl: string;
 } {
   return {
     url: `/api/images/${imageId}/serve`,
     thumbnailUrl: `/api/images/${imageId}/serve?thumbnail=true`,
+    secureUrl: `/api/images/${imageId}/serve`,
   };
 }

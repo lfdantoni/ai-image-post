@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { cn } from "@/lib/utils";
-import { LayoutDashboard, Images, Upload, LogOut, Menu, X } from "lucide-react";
+import { LayoutDashboard, Images, Upload, LogOut, Menu, X, PlusSquare } from "lucide-react";
 import { useState } from "react";
 import { UserAvatar } from "@/components/auth/UserAvatar";
 import { signOut, useSession } from "next-auth/react";
@@ -12,6 +12,7 @@ const navItems = [
   { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
   { href: "/gallery", label: "Galería", icon: Images },
   { href: "/upload", label: "Subir", icon: Upload },
+  { href: "/create-post", label: "Crear Post", icon: PlusSquare },
 ];
 
 export function Navbar() {

@@ -3,7 +3,7 @@ import { prisma } from "@/lib/db";
 import { generateProxyUrls } from "@/lib/cloudinary";
 import { redirect } from "next/navigation";
 import Link from "next/link";
-import Image from "next/image";
+import { AuthenticatedImage } from "@/components/gallery/AuthenticatedImage";
 import { Card, CardContent } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import { Images, Tag, Calendar, Upload, ArrowRight } from "lucide-react";
@@ -129,7 +129,7 @@ export default async function DashboardPage() {
                 href={`/image/${image.id}`}
                 className="group relative aspect-square rounded-lg overflow-hidden bg-gray-100 hover:shadow-lg transition-all duration-200"
               >
-                <Image
+                <AuthenticatedImage
                   src={image.thumbnailUrl || image.secureUrl}
                   alt=""
                   fill
