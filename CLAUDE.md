@@ -51,7 +51,8 @@ npm run db:studio    # Open Prisma Studio GUI
 - `react-easy-crop` - Image cropping with Instagram aspect ratios (4:5, 1:1, 1.91:1, 9:16)
 - `cloudinary` - Image storage and transformations
 - `zod` - API request validation
-- `openai` - AI-powered caption and hashtag generation
+- `openai` - OpenAI GPT-4 for AI generation
+- `@google/generative-ai` - Google Gemini for AI generation
 - `@dnd-kit/core`, `@dnd-kit/sortable` - Drag & drop for grid/carousel reordering
 - `react-swipeable` - Touch swipe support for carousel
 - `copy-to-clipboard` - Clipboard functionality
@@ -78,23 +79,41 @@ Components in `components/preview/`:
 - `CarouselPreview` - Multi-slide carousel with swipe navigation and slide management
 
 ### AI Generation (Phase 2)
+
+**Multi-Provider Architecture** (`lib/ai/`):
+- `base-provider.ts` - Abstract base class with shared prompt-building logic
+- `openai-provider.ts` - OpenAI GPT-4o-mini implementation
+- `gemini-provider.ts` - Google Gemini 1.5 Flash implementation
+- `provider-factory.ts` - Singleton factory with provider availability checking
+- `ai-service.ts` - High-level service with automatic fallback (if primary fails, tries other)
+
 Components in `components/ai/`:
-- `CaptionGenerator` - Modal for AI caption generation with tone, length, language options
+- `CaptionGenerator` - Modal for AI caption generation with tone, length, language, provider options
 - `HashtagGenerator` - Hashtag generation with category filtering (trending, niche, branded)
+- `AIProviderSelector` - Visual provider selector with availability indicators
 
 Hooks in `hooks/`:
-- `useGenerateCaption` - Caption generation state management with regenerate support
-- `useGenerateHashtags` - Hashtag generation with selection/deselection
+- `useGenerateCaption` - Caption generation with provider selection and metadata tracking
+- `useGenerateHashtags` - Hashtag generation with provider selection and metadata
+- `useAIProviders` - Fetches available providers and their configuration
 
 API Routes:
-- `POST /api/ai/caption` - Generate captions using OpenAI GPT-4o-mini
-- `POST /api/ai/hashtags` - Generate categorized hashtags
+- `POST /api/ai/caption` - Generate captions (supports `provider` param: "openai" | "gemini")
+- `POST /api/ai/hashtags` - Generate categorized hashtags (supports `provider` param)
+- `GET /api/ai/providers` - Returns available providers and default configuration
 - `GET/POST/DELETE /api/hashtag-groups` - Manage saved hashtag collections
 
-OpenAI configuration in `lib/openai.ts`:
-- Uses GPT-4o-mini for cost efficiency
-- Supports multiple caption tones: artistic, casual, professional, inspirational
-- Includes banned hashtag detection for Instagram compliance
+Provider Comparison:
+| Provider | Model | Speed | Cost | Default |
+|----------|-------|-------|------|---------|
+| Gemini | gemini-1.5-flash | ~0.5-1s | Lower | Yes |
+| OpenAI | gpt-4o-mini | ~1-2s | Higher | No |
+
+Features:
+- Automatic fallback if primary provider fails
+- Provider selection in UI via "Advanced options" accordion
+- Metadata display showing provider used, model, and latency
+- Rate limiting per provider
 
 ## Environment Variables
 
@@ -103,7 +122,15 @@ Required in `.env.local` (see `.env.example`):
 - `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET` - Google OAuth
 - `DATABASE_URL` - PostgreSQL connection string
 - `NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME`, `CLOUDINARY_API_KEY`, `CLOUDINARY_API_SECRET` - Cloudinary
-- `OPENAI_API_KEY` - OpenAI API key for caption/hashtag generation
+
+**AI Providers** (at least one required):
+- `OPENAI_API_KEY` - OpenAI API key for GPT-4o-mini
 - `OPENAI_ORG_ID` (optional) - OpenAI organization ID
+- `OPENAI_MODEL` (optional, default: gpt-4o-mini) - OpenAI model to use
+- `GOOGLE_GEMINI_API_KEY` - Google Gemini API key
+- `GEMINI_MODEL` (optional, default: gemini-1.5-flash) - Gemini model to use
+- `DEFAULT_AI_PROVIDER` (optional, default: gemini) - Default provider ("openai" | "gemini")
+
+**Rate Limits**:
 - `CAPTION_RATE_LIMIT_PER_MINUTE` (optional, default: 10) - Rate limit for caption generation
 - `HASHTAG_RATE_LIMIT_PER_MINUTE` (optional, default: 20) - Rate limit for hashtag generation
