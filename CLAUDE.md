@@ -53,6 +53,9 @@ npm run db:studio    # Open Prisma Studio GUI
 - `zod` - API request validation
 - `openai` - OpenAI GPT-4 for AI generation
 - `@google/generative-ai` - Google Gemini for AI generation
+- `googleapis` - Google Drive API v3 integration
+- `sharp` - Image optimization for Instagram export
+- `archiver` - ZIP file creation for batch exports
 - `@dnd-kit/core`, `@dnd-kit/sortable` - Drag & drop for grid/carousel reordering
 - `react-swipeable` - Touch swipe support for carousel
 - `copy-to-clipboard` - Clipboard functionality
@@ -65,12 +68,13 @@ Defined in `lib/instagram-formats.ts`:
 - story (9:16)
 
 ### Database Models
-- `User` - Auth.js user with Google OAuth
-- `Image` - Cloudinary data, dimensions, AI metadata (prompt, model, version)
+- `User` - Auth.js user with Google OAuth, Drive connection settings
+- `Image` - Cloudinary data, dimensions, AI metadata, Drive export info
 - `Tag` - Many-to-many with images for organization
 - `Post` - Instagram post draft with caption, hashtags, and status (DRAFT, READY, SCHEDULED, PUBLISHED)
 - `PostImage` - Many-to-many between Post and Image with ordering for carousels
 - `HashtagGroup` - Saved hashtag collections for quick reuse
+- `ExportLog` - Log of image exports (destination, options, file size)
 
 ### Instagram Preview (Phase 2)
 Components in `components/preview/`:
@@ -115,6 +119,72 @@ Features:
 - Metadata display showing provider used, model, and latency
 - Rate limiting per provider
 
+### Google Drive Integration (Phase 3)
+
+**Services** (`lib/`):
+- `google-drive.ts` - GoogleDriveService class for Drive API v3 operations
+- `image-optimizer.ts` - ImageOptimizer class using Sharp for Instagram optimization
+
+**Authentication Flow**:
+- OAuth scope `drive.file` included in Google login (access only to app-created files)
+- Tokens stored in Account table via Prisma adapter
+- `getGoogleTokens()` and `updateGoogleTokens()` in `lib/auth.ts`
+- Automatic token refresh via googleapis client
+
+**Drive Folder Structure**:
+```
+Mi Drive/
+└── AIImagePost/           # Root folder (created on first use)
+    ├── Exports/           # Optimized images for Instagram
+    │   └── 2025-01/       # Organized by month
+    └── Backups/           # Original images (optional)
+        └── originals/
+```
+
+**API Routes**:
+- `GET /api/drive/status` - Check connection status and quota
+- `POST /api/drive/initialize` - Create root folder and connect
+- `POST /api/drive/disconnect` - Clear connection (files remain in Drive)
+- `GET/PUT /api/drive/settings` - Manage sync settings
+
+**Components**:
+- `components/settings/DriveSettings.tsx` - Drive connection and settings panel
+- `components/export/ExportModal.tsx` - Single image export with options
+
+**Hooks**:
+- `hooks/useGoogleDrive.ts` - Drive connection state, quota, settings
+- `hooks/useImageExport.ts` - Export operations with progress tracking
+
+### Image Export (Phase 3)
+
+**Optimization Pipeline** (using Sharp):
+1. Fetch original from Cloudinary
+2. Resize to exact Instagram dimensions (1080px width)
+3. Convert to sRGB color space
+4. Apply subtle sharpening (sigma 0.5)
+5. Export as JPEG with mozjpeg
+6. Ensure file size ≤1.6MB (prevents IG recompression)
+
+**Instagram Dimensions**:
+| Aspect Ratio | Dimensions | Use Case |
+|--------------|------------|----------|
+| portrait (4:5) | 1080x1350 | Feed (recommended) |
+| square (1:1) | 1080x1080 | Feed |
+| landscape (1.91:1) | 1080x566 | Feed |
+| story (9:16) | 1080x1920 | Stories/Reels |
+
+**API Routes**:
+- `POST /api/export/image` - Single image export (download or Drive)
+- `POST /api/export/batch` - Multiple images (ZIP or Drive folder)
+- `POST /api/export/estimate` - Estimate file size for quality
+
+**Export Options**:
+- Quality: 60-100% (default 90%)
+- Sharpening: on/off (default on)
+- Max file size: customizable (default 1.6MB)
+- Include metadata JSON: caption, hashtags, AI info
+- Destination: download or Google Drive
+
 ## Environment Variables
 
 Required in `.env.local` (see `.env.example`):
@@ -134,3 +204,7 @@ Required in `.env.local` (see `.env.example`):
 **Rate Limits**:
 - `CAPTION_RATE_LIMIT_PER_MINUTE` (optional, default: 10) - Rate limit for caption generation
 - `HASHTAG_RATE_LIMIT_PER_MINUTE` (optional, default: 20) - Rate limit for hashtag generation
+
+**Google Drive** (Phase 3):
+- `GOOGLE_DRIVE_FOLDER_NAME` (optional, default: AIImagePost) - Root folder name in Drive
+- `GOOGLE_DRIVE_ENABLED` (optional, default: true) - Enable/disable Drive features

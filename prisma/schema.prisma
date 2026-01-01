@@ -45,6 +45,13 @@ model User {
   images        Image[]
   posts         Post[]
   hashtagGroups HashtagGroup[]
+  exportLogs    ExportLog[]
+
+  // Google Drive
+  driveRootFolderId     String?
+  driveConnectedAt      DateTime?
+  driveSettings         Json?      // { autoSync, backupOriginals, includeMetadataJson, folderOrganization }
+
   createdAt     DateTime  @default(now())
   updatedAt     DateTime  @updatedAt
 }
@@ -86,6 +93,11 @@ model Image {
 
   // Post associations
   postImages      PostImage[]
+
+  // Google Drive sync
+  driveFileId           String?    // ID del archivo exportado en Drive
+  driveExportedAt       DateTime?  // Última vez que se exportó a Drive
+  driveBackupId         String?    // ID del backup original en Drive
 
   // Timestamps
   createdAt       DateTime @default(now())
@@ -168,4 +180,25 @@ enum PostStatus {
   READY
   SCHEDULED
   PUBLISHED
+}
+
+model ExportLog {
+  id              String   @id @default(cuid())
+  userId          String
+  user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  imageId         String?  // null si es batch
+  imageIds        String[] // para batch export
+
+  destination     String   // "download" | "drive"
+  driveFileId     String?
+  driveFolderId   String?
+
+  options         Json     // opciones usadas
+  fileSize        Int      // tamaño final en bytes
+
+  createdAt       DateTime @default(now())
+
+  @@index([userId])
+  @@index([createdAt])
 }

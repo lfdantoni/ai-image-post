@@ -31,6 +31,16 @@ export async function GET(
       },
       include: {
         tags: true,
+        postImages: {
+          include: {
+            post: {
+              select: {
+                caption: true,
+                hashtags: true,
+              },
+            },
+          },
+        },
       },
     });
 

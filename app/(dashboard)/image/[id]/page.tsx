@@ -12,12 +12,14 @@ import {
   Copy,
   Check,
   Edit2,
+  FileDown,
 } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import { Badge } from "@/components/ui/Badge";
 import { Modal } from "@/components/ui/Modal";
 import { PageLoader } from "@/components/shared/LoadingSpinner";
+import { ExportModal } from "@/components/export/ExportModal";
 import { formatBytes } from "@/lib/utils";
 import type { ImageData } from "@/types";
 
@@ -32,6 +34,7 @@ export default function ImageDetailPage() {
   const [copied, setCopied] = useState(false);
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
+  const [showExportModal, setShowExportModal] = useState(false);
 
   useEffect(() => {
     const fetchImage = async () => {
@@ -260,10 +263,18 @@ export default function ImageDetailPage() {
             </Card>
           )}
 
-          <div className="flex gap-3">
+          <div className="flex flex-col gap-3">
+            <Button
+              onClick={() => setShowExportModal(true)}
+              className="w-full"
+              leftIcon={<FileDown className="w-4 h-4" />}
+            >
+              Exportar optimizada
+            </Button>
             <Button
               onClick={handleDownload}
-              className="flex-1"
+              variant="outline"
+              className="w-full"
               leftIcon={<Download className="w-4 h-4" />}
             >
               Descargar original
@@ -301,6 +312,25 @@ export default function ImageDetailPage() {
           </div>
         </div>
       </Modal>
+
+      <ExportModal
+        isOpen={showExportModal}
+        onClose={() => setShowExportModal(false)}
+        imageId={image.id}
+        imageUrl={imageUrl || image.secureUrl}
+        aspectRatio={image.aspectRatio}
+        currentCaption={
+          (image as any).postImages?.[0]?.post?.caption || undefined
+        }
+        currentHashtags={
+          (image as any).postImages?.[0]?.post?.hashtags || undefined
+        }
+        onExportComplete={(result) => {
+          if (result.success) {
+            setShowExportModal(false);
+          }
+        }}
+      />
     </div>
   );
 }
