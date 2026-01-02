@@ -64,6 +64,7 @@ Requirements:
 - Do NOT include the # symbol in the tags
 - Avoid banned or shadowbanned Instagram hashtags
 - Focus on hashtags with moderate to high engagement potential
+- Output ONLY valid JSON in the requested format
 
 Return the response as a JSON object with this exact structure:
 {
@@ -72,7 +73,7 @@ Return the response as a JSON object with this exact structure:
   ]
 }
 
-Only return the JSON, no additional text.`;
+Only return the JSON, no additional text or explanation.`;
   }
 
   protected getToneDescription(tone: string): string {

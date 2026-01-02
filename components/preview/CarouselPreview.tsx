@@ -42,6 +42,9 @@ interface CarouselPreviewProps {
   slides: CarouselSlide[];
   username: string;
   avatarUrl?: string;
+  caption?: string;
+  hashtags?: string[];
+  likesCount?: number;
   aspectRatio?: "portrait" | "square" | "landscape";
   onSlideChange?: (index: number) => void;
   onAddSlide?: () => void;
@@ -130,6 +133,9 @@ export function CarouselPreview({
   slides,
   username,
   avatarUrl,
+  caption = "",
+  hashtags = [],
+  likesCount = 0,
   aspectRatio = "portrait",
   onSlideChange,
   onAddSlide,
@@ -141,6 +147,16 @@ export function CarouselPreview({
   const [currentIndex, setCurrentIndex] = useState(0);
   const [isLiked, setIsLiked] = useState(false);
   const [isSaved, setIsSaved] = useState(false);
+  const [showFullCaption, setShowFullCaption] = useState(false);
+
+  const formattedLikes = (likesCount || 0).toLocaleString();
+  const hashtagsText = hashtags.length > 0 ? hashtags.map((h) => `#${h}`).join(" ") : "";
+
+  const displayCaption = caption || "";
+  const shouldTruncateCaption = displayCaption.length > 100 && !showFullCaption;
+  const truncatedCaption = shouldTruncateCaption
+    ? displayCaption.slice(0, 100) + "..."
+    : displayCaption;
 
   const sensors = useSensors(
     useSensor(PointerSensor, {
@@ -355,6 +371,50 @@ export function CarouselPreview({
             )}
           />
         </button>
+      </div>
+
+      {/* Likes */}
+      <div className="px-3 pb-1">
+        <span className="text-sm font-semibold text-[#262626]">
+          {formattedLikes} likes
+        </span>
+      </div>
+
+      {/* Caption */}
+      {(displayCaption || hashtagsText) && (
+        <div className="px-3 pb-2">
+          <div className="text-sm text-[#262626]">
+            <span className="font-semibold mr-1">{username}</span>
+            <span className="whitespace-pre-wrap">
+              {truncatedCaption}
+              {shouldTruncateCaption && (
+                <button
+                  onClick={() => setShowFullCaption(true)}
+                  className="text-[#8e8e8e] ml-1"
+                >
+                  more
+                </button>
+              )}
+            </span>
+          </div>
+          {hashtagsText && (
+            <div className="mt-1">
+              <span className="text-sm text-[#00376b]">{hashtagsText}</span>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Comments link */}
+      <div className="px-3 pb-2">
+        <button className="text-sm text-[#8e8e8e]">
+          View all 50 comments
+        </button>
+      </div>
+
+      {/* Timestamp */}
+      <div className="px-3 pb-3">
+        <span className="text-[10px] text-[#8e8e8e] uppercase">2 hours ago</span>
       </div>
 
       {/* Thumbnail strip with drag & drop */}

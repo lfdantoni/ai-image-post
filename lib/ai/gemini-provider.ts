@@ -1,4 +1,4 @@
-import { GoogleGenerativeAI, GenerativeModel } from "@google/generative-ai";
+import { GoogleGenerativeAI, GenerativeModel, HarmCategory, HarmBlockThreshold } from "@google/generative-ai";
 import { BaseAIProvider } from "./base-provider";
 import {
   AIProvider,
@@ -21,6 +21,25 @@ function getGeminiClient(): GoogleGenerativeAI {
   return geminiClient;
 }
 
+const SAFETY_SETTINGS = [
+  {
+    category: HarmCategory.HARM_CATEGORY_HARASSMENT,
+    threshold: HarmBlockThreshold.BLOCK_ONLY_HIGH,
+  },
+  {
+    category: HarmCategory.HARM_CATEGORY_HATE_SPEECH,
+    threshold: HarmBlockThreshold.BLOCK_ONLY_HIGH,
+  },
+  {
+    category: HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT,
+    threshold: HarmBlockThreshold.BLOCK_ONLY_HIGH,
+  },
+  {
+    category: HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT,
+    threshold: HarmBlockThreshold.BLOCK_ONLY_HIGH,
+  },
+];
+
 export class GeminiProvider extends BaseAIProvider {
   readonly name: AIProvider = "gemini";
   readonly model: string;
@@ -34,7 +53,10 @@ export class GeminiProvider extends BaseAIProvider {
   private getModel(): GenerativeModel {
     if (!this.generativeModel) {
       const client = getGeminiClient();
-      this.generativeModel = client.getGenerativeModel({ model: this.model });
+      this.generativeModel = client.getGenerativeModel({ 
+        model: this.model,
+        safetySettings: SAFETY_SETTINGS,
+      });
     }
     return this.generativeModel;
   }
@@ -51,7 +73,7 @@ export class GeminiProvider extends BaseAIProvider {
     const result = await model.generateContent({
       contents: [{ role: "user", parts: [{ text: fullPrompt }] }],
       generationConfig: {
-        maxOutputTokens: 1000,
+        maxOutputTokens: 1500,
         temperature: 0.8,
       },
     });
@@ -79,7 +101,7 @@ export class GeminiProvider extends BaseAIProvider {
     const result = await model.generateContent({
       contents: [{ role: "user", parts: [{ text: prompt }] }],
       generationConfig: {
-        maxOutputTokens: 1000,
+        maxOutputTokens: 2000,
         temperature: 0.7,
         responseMimeType: "application/json",
       },
@@ -96,18 +118,35 @@ export class GeminiProvider extends BaseAIProvider {
     };
 
     try {
-      const parsed = JSON.parse(content);
+      // Robust JSON extraction: handle markdown blocks and potential prefix/suffix text
+      let jsonContent = content;
+      const jsonMatch = content.match(/```json\s*([\s\S]*?)\s*```/) || 
+                        content.match(/```\s*([\s\S]*?)\s*```/);
+      
+      if (jsonMatch && jsonMatch[1]) {
+        jsonContent = jsonMatch[1].trim();
+      } else {
+        // Fallback: try to find the first '{' and last '}'
+        const firstBrace = content.indexOf('{');
+        const lastBrace = content.lastIndexOf('}');
+        if (firstBrace !== -1 && lastBrace !== -1 && lastBrace > firstBrace) {
+          jsonContent = content.substring(firstBrace, lastBrace + 1);
+        }
+      }
+
+      const parsed = JSON.parse(jsonContent);
       const hashtags: Hashtag[] = (parsed.hashtags || []).map(
         (h: { tag: string; category: string; isBanned?: boolean }) => ({
           tag: h.tag.replace(/^#/, "").toLowerCase(),
-          category: h.category as "trending" | "niche" | "branded",
+          category: (h.category as string || "niche").toLowerCase() as "trending" | "niche" | "branded",
           selected: true,
           isBanned: h.isBanned || false,
         })
       );
       return { hashtags, usage };
-    } catch {
-      console.error("Failed to parse hashtags response:", content);
+    } catch (parseError) {
+      console.error("Failed to parse hashtags response from Gemini:", parseError);
+      console.error("Original content:", content);
       return { hashtags: [], usage };
     }
   }

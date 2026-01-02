@@ -48,7 +48,7 @@ export class OpenAIProvider extends BaseAIProvider {
           content: `Create an Instagram caption for this image:\n\n${params.prompt}`,
         },
       ],
-      max_tokens: 500,
+      max_tokens: 1000,
       temperature: 0.8,
     });
 
@@ -77,7 +77,7 @@ export class OpenAIProvider extends BaseAIProvider {
         },
         { role: "user", content: prompt },
       ],
-      max_tokens: 1000,
+      max_tokens: 2000,
       temperature: 0.7,
       response_format: { type: "json_object" },
     });
@@ -90,18 +90,35 @@ export class OpenAIProvider extends BaseAIProvider {
     };
 
     try {
-      const parsed = JSON.parse(content);
+      // Robust JSON extraction: handle potential markdown blocks even with response_format
+      let jsonContent = content;
+      const jsonMatch = content.match(/```json\s*([\s\S]*?)\s*```/) || 
+                        content.match(/```\s*([\s\S]*?)\s*```/);
+      
+      if (jsonMatch && jsonMatch[1]) {
+        jsonContent = jsonMatch[1].trim();
+      } else {
+        // Fallback: try to find the first '{' and last '}'
+        const firstBrace = content.indexOf('{');
+        const lastBrace = content.lastIndexOf('}');
+        if (firstBrace !== -1 && lastBrace !== -1 && lastBrace > firstBrace) {
+          jsonContent = content.substring(firstBrace, lastBrace + 1);
+        }
+      }
+
+      const parsed = JSON.parse(jsonContent);
       const hashtags: Hashtag[] = (parsed.hashtags || []).map(
         (h: { tag: string; category: string; isBanned?: boolean }) => ({
           tag: h.tag.replace(/^#/, "").toLowerCase(),
-          category: h.category as "trending" | "niche" | "branded",
+          category: (h.category as string || "niche").toLowerCase() as "trending" | "niche" | "branded",
           selected: true,
           isBanned: h.isBanned || false,
         })
       );
       return { hashtags, usage };
-    } catch {
-      console.error("Failed to parse hashtags response:", content);
+    } catch (parseError) {
+      console.error("Failed to parse hashtags response from OpenAI:", parseError);
+      console.error("Original content:", content);
       return { hashtags: [], usage };
     }
   }

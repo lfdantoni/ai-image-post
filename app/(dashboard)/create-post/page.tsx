@@ -580,6 +580,9 @@ function CreatePostContent() {
                   imageUrl: img.secureUrl || img.url,
                 }))}
                 username="your_username"
+                caption={caption}
+                hashtags={hashtags}
+                likesCount={likesCount}
                 aspectRatio={aspectRatio}
               />
             )}
