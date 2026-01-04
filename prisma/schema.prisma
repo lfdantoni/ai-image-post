@@ -52,6 +52,10 @@ model User {
   driveConnectedAt      DateTime?
   driveSettings         Json?      // { autoSync, backupOriginals, includeMetadataJson, folderOrganization }
 
+  // Instagram
+  instagramAccount      InstagramAccount?
+  publishedPosts        PublishedPost[]
+
   createdAt     DateTime  @default(now())
   updatedAt     DateTime  @updatedAt
 }
@@ -139,6 +143,9 @@ model Post {
   // Status
   status          PostStatus @default(DRAFT)
 
+  // Relación con publicación en Instagram
+  publishedPost   PublishedPost?
+
   // Timestamps
   createdAt       DateTime   @default(now())
   updatedAt       DateTime   @updatedAt
@@ -180,6 +187,7 @@ enum PostStatus {
   READY
   SCHEDULED
   PUBLISHED
+  FAILED
 }
 
 model ExportLog {
@@ -201,4 +209,76 @@ model ExportLog {
 
   @@index([userId])
   @@index([createdAt])
+}
+
+model InstagramAccount {
+  id                      String    @id @default(cuid())
+  userId                  String    @unique
+  user                    User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  // Identificadores
+  instagramUserId         String    @unique
+  instagramUsername       String
+  facebookPageId          String?
+  facebookPageName        String?
+
+  // Tokens
+  accessToken             String    @db.Text
+  tokenExpiresAt          DateTime
+
+  // Metadata
+  profilePictureUrl       String?
+  accountType             String    // "business" | "creator"
+  followersCount          Int?
+
+  // Rate limiting
+  postsPublishedToday     Int       @default(0)
+  rateLimitResetAt        DateTime?
+
+  // Timestamps
+  connectedAt             DateTime  @default(now())
+  lastSyncAt              DateTime?
+
+  // Relaciones
+  publishedPosts          PublishedPost[]
+
+  @@index([userId])
+}
+
+model PublishedPost {
+  id                      String    @id @default(cuid())
+
+  // Relaciones
+  userId                  String
+  user                    User      @relation(fields: [userId], references: [id])
+  instagramAccountId      String
+  instagramAccount        InstagramAccount @relation(fields: [instagramAccountId], references: [id])
+  postId                  String?   @unique  // Post de AIGram
+  post                    Post?     @relation(fields: [postId], references: [id], onDelete: SetNull)
+
+  // Instagram data
+  instagramMediaId        String    @unique
+  permalink               String
+  mediaType               String    // "IMAGE" | "CAROUSEL"
+
+  // Contenido publicado
+  caption                 String?   @db.Text
+  hashtags                String[]
+  thumbnailUrl            String?
+
+  // Métricas
+  likesCount              Int       @default(0)
+  commentsCount           Int       @default(0)
+  reachCount              Int?
+  impressionsCount        Int?
+  savedCount              Int?
+
+  // Timestamps
+  publishedAt             DateTime
+  metricsUpdatedAt        DateTime?
+  createdAt               DateTime  @default(now())
+
+  @@index([userId])
+  @@index([instagramAccountId])
+  @@index([publishedAt])
 }

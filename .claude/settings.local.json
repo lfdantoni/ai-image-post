@@ -6,7 +6,11 @@
       "Bash(npm run build:*)",
       "Bash(dir:*)",
       "Bash(npm install:*)",
-      "Bash(npm run db:push:*)"
+      "Bash(npm run db:push:*)",
+      "Bash(git remote:*)",
+      "mcp__github__get_me",
+      "mcp__github__issue_write",
+      "mcp__github__issue_read"
     ]
   }
 }
