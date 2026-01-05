@@ -26,12 +26,13 @@ export async function GET(request: NextRequest) {
     const limit = parseInt(searchParams.get("limit") || "20");
     const skip = (page - 1) * limit;
 
-    const where: { userId: string; status?: "DRAFT" | "READY" | "SCHEDULED" | "PUBLISHED" } = {
+    const where: { userId: string; status?: "DRAFT" | "READY" | "SCHEDULED" | "PUBLISHED" | "FAILED" } = {
       userId: session.user.id,
     };
 
-    if (status && ["DRAFT", "READY", "SCHEDULED", "PUBLISHED"].includes(status)) {
-      where.status = status as "DRAFT" | "READY" | "SCHEDULED" | "PUBLISHED";
+    // Support filtering by status
+    if (status && ["DRAFT", "READY", "SCHEDULED", "PUBLISHED", "FAILED"].includes(status.toUpperCase())) {
+      where.status = status.toUpperCase() as "DRAFT" | "READY" | "SCHEDULED" | "PUBLISHED" | "FAILED";
     }
 
     const [posts, total] = await Promise.all([
@@ -44,6 +45,19 @@ export async function GET(request: NextRequest) {
             },
             orderBy: {
               order: "asc",
+            },
+          },
+          // Include published post data if exists
+          publishedPost: {
+            select: {
+              id: true,
+              permalink: true,
+              publishedAt: true,
+              likesCount: true,
+              commentsCount: true,
+              reachCount: true,
+              impressionsCount: true,
+              metricsUpdatedAt: true,
             },
           },
         },

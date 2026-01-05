@@ -70,3 +70,49 @@ export function generateProxyUrls(imageId: string): {
     secureUrl: `/api/images/${imageId}/serve`,
   };
 }
+
+/**
+ * Genera una URL pública temporal para Instagram
+ * Instagram requiere que las imágenes estén en URLs públicamente accesibles
+ * Esta URL es firmada y expira después de un tiempo (2 horas para dar tiempo al proceso)
+ */
+export function generateInstagramPublishUrl(
+  publicId: string,
+  options: {
+    width?: number;
+    height?: number;
+    format?: "jpg" | "jpeg";
+    quality?: number;
+  } = {}
+): string {
+  // Instagram publishing needs 2 hours for the upload + processing time
+  const INSTAGRAM_URL_EXPIRATION = 2 * 60 * 60; // 2 hours in seconds
+  const expiresAt = Math.floor(Date.now() / 1000) + INSTAGRAM_URL_EXPIRATION;
+
+  return cloudinary.url(publicId, {
+    secure: true,
+    sign_url: true,
+    type: "authenticated", // Use authenticated type for signed URLs
+    expires_at: expiresAt,
+    width: options.width || 1080,
+    crop: "limit", // Don't upscale, only downscale if needed
+    quality: options.quality || 90,
+    format: options.format || "jpg", // Instagram requires JPEG
+    flags: "progressive", // Progressive JPEG for better loading
+  });
+}
+
+/**
+ * Genera múltiples URLs públicas temporales para un carrusel de Instagram
+ */
+export function generateInstagramCarouselUrls(
+  publicIds: string[],
+  options: {
+    width?: number;
+    height?: number;
+    format?: "jpg" | "jpeg";
+    quality?: number;
+  } = {}
+): string[] {
+  return publicIds.map((publicId) => generateInstagramPublishUrl(publicId, options));
+}
