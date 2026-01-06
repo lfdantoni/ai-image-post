@@ -92,13 +92,14 @@ export function generateInstagramPublishUrl(
   return cloudinary.url(publicId, {
     secure: true,
     sign_url: true,
-    type: "authenticated", // Use authenticated type for signed URLs
+    type: "private",
+    resource_type: "image",
     expires_at: expiresAt,
     width: options.width || 1080,
-    crop: "limit", // Don't upscale, only downscale if needed
+    crop: "limit",
     quality: options.quality || 90,
-    format: options.format || "jpg", // Instagram requires JPEG
-    flags: "progressive", // Progressive JPEG for better loading
+    format: "jpg", // Force JPG extension in the URL
+    flags: "progressive",
   });
 }
 

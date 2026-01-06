@@ -29,6 +29,15 @@ import { CaptionGenerator } from "@/components/ai/CaptionGenerator";
 import { HashtagGenerator } from "@/components/ai/HashtagGenerator";
 import { AuthenticatedImage } from "@/components/gallery/AuthenticatedImage";
 import { ImageData } from "@/types";
+import {
+  PublishToInstagramButton,
+  PublishConfirmationModal,
+  PublishProgressModal,
+  PublishSuccessModal,
+  PublishedPostsSection,
+  PublishedPostDetail,
+} from "@/components/instagram";
+import { usePublishToInstagram } from "@/hooks/usePublishToInstagram";
 
 type ViewMode = "feed" | "grid" | "carousel";
 
@@ -52,7 +61,8 @@ function CreatePostContent() {
   const searchParams = useSearchParams();
   const imageIds = searchParams.get("images")?.split(",").filter(Boolean) || [];
   const editPostId = searchParams.get("postId");
-
+  const publishedPostId = searchParams.get("publishedPostId");
+   
   const [images, setImages] = useState<ImageData[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [viewMode, setViewMode] = useState<ViewMode>("feed");
@@ -70,6 +80,18 @@ function CreatePostContent() {
     hashtags: string[];
     imageIds: string[];
   } | null>(null);
+
+  // Instagram publish state
+  const [showPublishConfirmation, setShowPublishConfirmation] = useState(false);
+  const [showPublishSuccess, setShowPublishSuccess] = useState(false);
+  const {
+    isPublishing,
+    progress,
+    error: publishError,
+    result: publishResult,
+    publish,
+    reset: resetPublish,
+  } = usePublishToInstagram();
 
   // Sincronizar currentPostId con editPostId cuando cambia
   useEffect(() => {
@@ -350,6 +372,52 @@ function CreatePostContent() {
     router.push(`/create-post?postId=${draft.id}`);
   };
 
+  // Instagram publish handlers
+  const handlePublishClick = () => {
+    setShowPublishConfirmation(true);
+  };
+
+  const handlePublishConfirm = async () => {
+    setShowPublishConfirmation(false);
+
+    // First save the draft if there are unsaved changes or no post ID
+    if (!currentPostId || hasUnsavedChanges) {
+      await handleSaveDraft();
+    }
+
+    // Use the current post ID (might have been set by handleSaveDraft)
+    const postIdToPublish = currentPostId;
+    if (!postIdToPublish) {
+      console.error("No post ID to publish");
+      return;
+    }
+
+    const result = await publish(postIdToPublish);
+    if (result) {
+      setShowPublishSuccess(true);
+      loadDrafts(); // Refresh drafts after publishing
+    } else {
+      // Error is handled by the progress modal showing error state
+      setShowPublishSuccess(true); // Show the error in success modal
+    }
+  };
+
+  const handlePublishSuccessClose = () => {
+    setShowPublishSuccess(false);
+    resetPublish();
+  };
+
+  const handleCreateNewPost = () => {
+    setShowPublishSuccess(false);
+    resetPublish();
+    resetState();
+    router.push("/create-post");
+  };
+
+  const handleViewPublishedPostDetails = (publishedPostId: string) => {
+    router.push(`/create-post?publishedPostId=${publishedPostId}`);
+  };
+
   // Determinar si estamos en la página inicial (sin parámetros)
   const isInitialPage = !editPostId && imageIds.length === 0;
 
@@ -363,6 +431,7 @@ function CreatePostContent() {
 
   if (images.length === 0) {
     return (
+      <>
       <div className="space-y-6">
         <div className="flex items-center gap-4">
           {!isInitialPage && (
@@ -463,7 +532,38 @@ function CreatePostContent() {
             <Loader2 className="w-6 h-6 animate-spin text-gray-400" />
           </div>
         )}
+
+        {/* Published Posts Section */}
+        <PublishedPostsSection
+          limit={6}
+          showViewAll={true}
+          onViewDetails={handleViewPublishedPostDetails}
+        />
       </div>
+
+      {/* Published Post Detail Modal - Needs to be here too because of early return */}
+      <Modal
+        isOpen={!!publishedPostId}
+        onClose={() => {
+          const params = new URLSearchParams(searchParams.toString());
+          params.delete("publishedPostId");
+          router.push(`/create-post?${params.toString()}`);
+        }}
+        title="Post Details"
+        size="xl"
+      >
+        {publishedPostId && (
+          <PublishedPostDetail
+            postId={publishedPostId}
+            onClose={() => {
+              const params = new URLSearchParams(searchParams.toString());
+              params.delete("publishedPostId");
+              router.push(`/create-post?${params.toString()}`);
+            }}
+          />
+        )}
+      </Modal>
+    </>
     );
   }
 
@@ -652,6 +752,13 @@ function CreatePostContent() {
               </div>
             </Card>
           )}
+
+          {/* Publish to Instagram */}
+          <PublishToInstagramButton
+            postId={currentPostId || ""}
+            disabled={images.length === 0 || isPublishing}
+            onPublish={handlePublishClick}
+          />
         </div>
       </div>
 
@@ -707,6 +814,62 @@ function CreatePostContent() {
             </Button>
           </div>
         </div>
+      </Modal>
+
+      {/* Instagram Publish Confirmation Modal */}
+      <PublishConfirmationModal
+        isOpen={showPublishConfirmation}
+        onClose={() => setShowPublishConfirmation(false)}
+        onConfirm={handlePublishConfirm}
+        post={{
+          id: currentPostId || "",
+          caption,
+          hashtags,
+          images: images.map((img) => ({
+            id: img.id,
+            width: img.width,
+            height: img.height,
+            aspectRatio: img.aspectRatio,
+          })),
+        }}
+      />
+
+      {/* Instagram Publish Progress Modal */}
+      <PublishProgressModal
+        isOpen={isPublishing}
+        progress={progress}
+      />
+
+      {/* Instagram Publish Success/Error Modal */}
+      <PublishSuccessModal
+        isOpen={showPublishSuccess}
+        onClose={handlePublishSuccessClose}
+        onCreateNew={handleCreateNewPost}
+        result={publishResult}
+        error={publishError}
+      />
+
+      {/* Published Post Detail Modal */}
+      <Modal
+        isOpen={!!publishedPostId}
+        onClose={() => {
+          const params = new URLSearchParams(searchParams.toString());
+          params.delete("publishedPostId");
+          router.push(`/create-post?${params.toString()}`);
+        }}
+        title="Post Details"
+        size="xl"
+      >
+        {publishedPostId && (
+          <PublishedPostDetail
+            postId={publishedPostId}
+            onClose={() => {
+              const params = new URLSearchParams(searchParams.toString());
+              params.delete("publishedPostId");
+              router.push(`/create-post?${params.toString()}`);
+            }}
+          />
+        )}
       </Modal>
     </div>
   );

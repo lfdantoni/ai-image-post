@@ -223,12 +223,14 @@ export class InstagramAPIService {
       image_url: imageUrl,
     };
 
-    if (caption && !isCarouselItem) {
-      body.caption = caption;
-    }
-
     if (isCarouselItem) {
       body.is_carousel_item = true;
+    } else {
+      // For single image posts, media_type is recommended
+      body.media_type = "IMAGE";
+      if (caption) {
+        body.caption = caption;
+      }
     }
 
     const response = await this.request<{ id: string }>(

@@ -74,24 +74,24 @@ export function PublishConfirmationModal({
             label: "Images",
             message: "No images selected",
           });
-        } else if (imageCount > INSTAGRAM_CAROUSEL_REQUIREMENTS.maxImages) {
+        } else if (imageCount > INSTAGRAM_CAROUSEL_REQUIREMENTS.maxItems) {
           results.push({
             isValid: false,
             label: "Images",
-            message: `Too many images (${imageCount}/${INSTAGRAM_CAROUSEL_REQUIREMENTS.maxImages})`,
+            message: `Too many images (${imageCount}/${INSTAGRAM_CAROUSEL_REQUIREMENTS.maxItems})`,
           });
         } else {
           const isCarousel = imageCount > 1;
           const firstImage = post.images[0];
           const validDimensions =
-            firstImage.width >= INSTAGRAM_IMAGE_REQUIREMENTS.minWidth &&
-            firstImage.height >= INSTAGRAM_IMAGE_REQUIREMENTS.minHeight;
+            firstImage.width >= INSTAGRAM_IMAGE_REQUIREMENTS.dimensions.minWidth &&
+            firstImage.height >= INSTAGRAM_IMAGE_REQUIREMENTS.dimensions.minHeight;
 
           if (!validDimensions) {
             results.push({
               isValid: false,
               label: "Image dimensions",
-              message: `Image too small (min ${INSTAGRAM_IMAGE_REQUIREMENTS.minWidth}x${INSTAGRAM_IMAGE_REQUIREMENTS.minHeight}px)`,
+              message: `Image too small (min ${INSTAGRAM_IMAGE_REQUIREMENTS.dimensions.minWidth}x${INSTAGRAM_IMAGE_REQUIREMENTS.dimensions.minHeight}px)`,
             });
           } else {
             results.push({

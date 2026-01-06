@@ -104,16 +104,20 @@ export function usePublishToInstagram(): UsePublishToInstagramReturn {
         const data = await response.json();
 
         if (!response.ok) {
-          // Handle specific error types
+          // Extraer información de error del objeto retornado por la API
+          const errorData = data.error || {};
+          
           const publishError: PublishError = {
-            code: data.code || "PUBLISH_ERROR",
-            message: data.error || "Failed to publish to Instagram",
-            details: data.details,
-            needsReconnect: data.needsReconnect,
+            code: errorData.code || data.code || "PUBLISH_ERROR",
+            message: typeof errorData === 'string' 
+              ? errorData 
+              : (errorData.message || data.message || "Failed to publish to Instagram"),
+            details: data.details || errorData.details,
+            needsReconnect: data.needsReconnect || errorData.needsReconnect,
           };
 
           // If reconnection is needed, clear the cache
-          if (data.needsReconnect) {
+          if (publishError.needsReconnect) {
             clearInstagramConnectionCache();
           }
 

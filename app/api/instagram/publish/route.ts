@@ -227,21 +227,29 @@ export async function POST(request: NextRequest) {
       instagramAccount.instagramUserId
     );
 
+    console.log("------------------------------------------");
+    console.log("INSTAGRAM PUBLISH ATTEMPT");
+    console.log("Post ID:", postId);
+    console.log("Account:", instagramAccount.instagramUsername);
+
     let result: { mediaId: string; permalink: string };
 
     try {
       if (post.images.length === 1) {
         // Single image post
         const imageUrl = generateInstagramPublishUrl(post.images[0].image.publicId);
+        console.log("GENERATE URL:", imageUrl);
         result = await instagramService.publishSingleImage(imageUrl, fullCaption);
       } else {
         // Carousel post
         const imageUrls = post.images.map((pi) =>
           generateInstagramPublishUrl(pi.image.publicId)
         );
+        console.log("GENERATE URLS:", imageUrls);
         result = await instagramService.publishCarousel(imageUrls, fullCaption);
       }
     } catch (err) {
+      console.log("PUBLISH ERROR:", err);
       // Handle specific Instagram API errors
       if (err instanceof TokenExpiredError) {
         return NextResponse.json(
