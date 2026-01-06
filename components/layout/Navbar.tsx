@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { cn } from "@/lib/utils";
-import { LayoutDashboard, Images, Upload, LogOut, Menu, X, PlusSquare } from "lucide-react";
+import { LayoutDashboard, Images, Upload, LogOut, Menu, X, PlusSquare, Settings } from "lucide-react";
 import { useState } from "react";
 import { UserAvatar } from "@/components/auth/UserAvatar";
 import { signOut, useSession } from "next-auth/react";
@@ -64,6 +64,18 @@ export function Navbar() {
                     name={session.user.name || "Usuario"}
                     image={session.user.image}
                   />
+                  <Link
+                    href="/settings"
+                    className={cn(
+                      "p-2 hover:bg-gray-100 rounded-lg transition-colors",
+                      pathname === "/settings"
+                        ? "text-primary bg-primary/10"
+                        : "text-gray-400 hover:text-gray-600"
+                    )}
+                    title="Configuración"
+                  >
+                    <Settings className="w-5 h-5" />
+                  </Link>
                   <button
                     onClick={() => signOut({ callbackUrl: "/login" })}
                     className="p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-lg transition-colors"
@@ -115,13 +127,28 @@ export function Navbar() {
               );
             })}
             {session?.user && (
-              <button
-                onClick={() => signOut({ callbackUrl: "/login" })}
-                className="w-full flex items-center gap-3 px-4 py-3 rounded-lg text-sm font-medium text-gray-600 hover:bg-gray-100 hover:text-gray-900 transition-colors"
-              >
-                <LogOut className="w-5 h-5" />
-                Cerrar sesión
-              </button>
+              <>
+                <Link
+                  href="/settings"
+                  onClick={() => setIsMobileMenuOpen(false)}
+                  className={cn(
+                    "flex items-center gap-3 px-4 py-3 rounded-lg text-sm font-medium transition-colors",
+                    pathname === "/settings"
+                      ? "bg-primary/10 text-primary"
+                      : "text-gray-600 hover:bg-gray-100 hover:text-gray-900"
+                  )}
+                >
+                  <Settings className="w-5 h-5" />
+                  Configuración
+                </Link>
+                <button
+                  onClick={() => signOut({ callbackUrl: "/login" })}
+                  className="w-full flex items-center gap-3 px-4 py-3 rounded-lg text-sm font-medium text-gray-600 hover:bg-gray-100 hover:text-gray-900 transition-colors"
+                >
+                  <LogOut className="w-5 h-5" />
+                  Cerrar sesión
+                </button>
+              </>
             )}
           </div>
         </div>

@@ -524,9 +524,8 @@ export class InstagramAPIService {
       profile_picture_url?: string;
       followers_count?: number;
       media_count?: number;
-      account_type?: string;
     }>(
-      `/${this.instagramAccountId}?fields=id,username,profile_picture_url,followers_count,media_count,account_type`
+      `/${this.instagramAccountId}?fields=id,username,profile_picture_url,followers_count,media_count`
     );
 
     return {
@@ -535,7 +534,6 @@ export class InstagramAPIService {
       profilePictureUrl: response.profile_picture_url,
       followersCount: response.followers_count,
       mediaCount: response.media_count,
-      accountType: response.account_type,
     };
   }
 

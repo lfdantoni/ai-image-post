@@ -55,8 +55,8 @@ export async function GET() {
     authUrl.searchParams.set("response_type", "code");
     authUrl.searchParams.set("state", state);
 
-    // Return the auth URL for the client to redirect
-    return NextResponse.json({ authUrl: authUrl.toString() });
+    // Redirect to the Facebook OAuth URL
+    return NextResponse.redirect(authUrl);
   } catch (error) {
     console.error("Error initiating Instagram auth:", error);
     return NextResponse.json(

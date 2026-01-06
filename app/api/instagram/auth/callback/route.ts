@@ -98,7 +98,9 @@ export async function GET(request: NextRequest) {
       );
 
     // Calculate token expiration date
-    const tokenExpiresAt = new Date(Date.now() + expiresIn * 1000);
+    // Default to 60 days if expiresIn is missing or invalid
+    const expiresInSeconds = typeof expiresIn === "number" ? expiresIn : 60 * 24 * 60 * 60;
+    const tokenExpiresAt = new Date(Date.now() + expiresInSeconds * 1000);
 
     // Step 3: Get Facebook Pages for the user
     const pages = await InstagramAPIService.getUserPages(longLivedToken);
@@ -182,6 +184,7 @@ export async function GET(request: NextRequest) {
         profilePictureUrl: profile.profilePictureUrl,
         accountType: profile.accountType || "business",
         followersCount: profile.followersCount,
+        connectedAt: new Date(),
         lastSyncAt: new Date(),
       },
     });

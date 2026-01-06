@@ -40,9 +40,6 @@ interface UseInstagramConnectionReturn extends InstagramConnectionState {
 // Cache duration in milliseconds (5 minutes)
 const CACHE_DURATION = 5 * 60 * 1000;
 
-let cachedStatus: InstagramConnectionState | null = null;
-let cacheTimestamp = 0;
-
 export function useInstagramConnection(): UseInstagramConnectionReturn {
   const [state, setState] = useState<InstagramConnectionState>({
     isConnected: false,
@@ -55,16 +52,12 @@ export function useInstagramConnection(): UseInstagramConnectionReturn {
   });
 
   const fetchStatus = useCallback(async (skipCache = false) => {
-    // Check cache first
-    if (!skipCache && cachedStatus && Date.now() - cacheTimestamp < CACHE_DURATION) {
-      setState(cachedStatus);
-      return;
-    }
-
     setState((prev) => ({ ...prev, isLoading: true, error: null }));
 
     try {
-      const response = await fetch("/api/instagram/status");
+      const response = await fetch("/api/instagram/status", {
+        cache: "no-store",
+      });
       const data = await response.json();
 
       if (!response.ok) {
@@ -72,33 +65,29 @@ export function useInstagramConnection(): UseInstagramConnectionReturn {
       }
 
       const newState: InstagramConnectionState = {
-        isConnected: data.isConnected,
+        isConnected: !!data.connected,
         isLoading: false,
         error: null,
         account: data.account
           ? {
               username: data.account.username,
-              profilePicture: data.account.profilePicture,
+              profilePicture: data.account.profilePictureUrl,
               accountType: data.account.accountType,
               facebookPage: data.account.facebookPage,
-              tokenExpiresAt: new Date(data.account.tokenExpiresAt),
-              connectedAt: new Date(data.account.connectedAt),
+              tokenExpiresAt: new Date(data.token?.expiresAt || Date.now()),
+              connectedAt: new Date(data.stats?.connectedAt || Date.now()),
             }
           : null,
         rateLimit: data.rateLimit
           ? {
-              used: data.rateLimit.used,
-              remaining: data.rateLimit.remaining,
+              used: data.rateLimit.postsToday,
+              remaining: data.rateLimit.postsRemaining,
               resetsAt: new Date(data.rateLimit.resetsAt),
             }
           : null,
         permissions: data.permissions || [],
-        hasPublishPermission: data.hasPublishPermission || false,
+        hasPublishPermission: (data.permissions || []).includes("instagram_content_publish") || !!data.connected,
       };
-
-      // Update cache
-      cachedStatus = newState;
-      cacheTimestamp = Date.now();
 
       setState(newState);
     } catch (err) {
@@ -129,10 +118,6 @@ export function useInstagramConnection(): UseInstagramConnectionReturn {
         throw new Error(data.error || "Failed to disconnect Instagram");
       }
 
-      // Clear cache
-      cachedStatus = null;
-      cacheTimestamp = 0;
-
       setState({
         isConnected: false,
         isLoading: false,
@@ -153,7 +138,7 @@ export function useInstagramConnection(): UseInstagramConnectionReturn {
   }, []);
 
   const refreshStatus = useCallback(async () => {
-    await fetchStatus(true); // Skip cache
+    await fetchStatus();
   }, [fetchStatus]);
 
   const refreshToken = useCallback(async (): Promise<boolean> => {
@@ -168,7 +153,7 @@ export function useInstagramConnection(): UseInstagramConnectionReturn {
       }
 
       // Refresh status to get new token expiration
-      await fetchStatus(true);
+      await fetchStatus();
       return true;
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : "Unknown error";
@@ -196,6 +181,5 @@ export function useInstagramConnection(): UseInstagramConnectionReturn {
 
 // Utility function to clear the cache (useful for testing or after certain actions)
 export function clearInstagramConnectionCache() {
-  cachedStatus = null;
-  cacheTimestamp = 0;
+  // Cache is removed
 }
