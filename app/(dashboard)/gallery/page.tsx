@@ -122,7 +122,7 @@ function GalleryContent() {
           <div className="flex gap-2">
             <Button variant="outline" onClick={handleCancelSelection}>
               <X className="w-4 h-4 mr-1" />
-              Cancelar
+              Cancel
             </Button>
             <Button onClick={handleConfirmSelection} disabled={selectedImages.length === 0}>
               <Check className="w-4 h-4 mr-1" />

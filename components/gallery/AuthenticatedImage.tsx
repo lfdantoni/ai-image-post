@@ -3,7 +3,7 @@
 import { useState, useEffect, useRef } from "react";
 import { cn } from "@/lib/utils";
 
-// Cache con información de expiración
+// Cache with expiration information
 interface CacheEntry {
   blobUrl: string;
   timestamp: number;
@@ -13,7 +13,7 @@ const CACHE_DURATION = 30 * 60 * 1000; // 30 minutos
 const imageCache = new Map<string, CacheEntry>();
 const loadingPromises = new Map<string, Promise<string>>();
 
-// Limpiar cache expirado periódicamente
+// Clean expired cache periodically
 if (typeof window !== "undefined") {
   setInterval(() => {
     const now = Date.now();
@@ -62,7 +62,7 @@ export function AuthenticatedImage({
     let isMounted = true;
 
     const loadImage = async (clearCache = false) => {
-      // Limpiar cache si se solicita (por ejemplo, después de un error)
+      // Clear cache if requested (e.g., after an error)
       if (clearCache) {
         const cached = imageCache.get(src);
         if (cached) {
@@ -71,7 +71,7 @@ export function AuthenticatedImage({
         }
       }
 
-      // Verificar cache válido
+      // Check valid cache
       const cached = imageCache.get(src);
       if (cached) {
         const age = Date.now() - cached.timestamp;
@@ -115,7 +115,7 @@ export function AuthenticatedImage({
             const blob = await response.blob();
             const blobUrl = URL.createObjectURL(blob);
             
-            // Guardar en cache con timestamp
+            // Save to cache with timestamp
             imageCache.set(src, {
               blobUrl,
               timestamp: Date.now(),
@@ -185,7 +185,7 @@ export function AuthenticatedImage({
           className
         )}
       >
-        <span className="text-xs text-gray-400">Error al cargar</span>
+        <span className="text-xs text-gray-400">Error loading</span>
       </div>
     );
   }

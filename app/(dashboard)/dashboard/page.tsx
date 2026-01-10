@@ -57,7 +57,7 @@ export default async function DashboardPage() {
       {/* Welcome section */}
       <div className="bg-white rounded-xl p-6 border border-gray-100">
         <h1 className="text-2xl font-bold text-gray-900">
-          Bienvenido, {session.user.name?.split(" ")[0] || "Usuario"}
+          Welcome, {session.user.name?.split(" ")[0] || "User"}
         </h1>
         <p className="text-gray-500 mt-1">
           Tienes {totalImages} {totalImages === 1 ? "imagen" : "imágenes"} en tu

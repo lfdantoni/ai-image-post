@@ -133,7 +133,7 @@ export function ImageCropper({
 
         <div className="flex gap-3 pt-2">
           <Button variant="outline" onClick={onCancel} className="flex-1">
-            Cancelar
+            Cancel
           </Button>
           <Button
             onClick={handleSave}

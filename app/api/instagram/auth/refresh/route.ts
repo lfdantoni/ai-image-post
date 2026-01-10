@@ -84,7 +84,11 @@ export async function POST() {
         );
 
       // Calculate new expiration date
-      const newTokenExpiresAt = new Date(Date.now() + expiresIn * 1000);
+      // Default to 60 days if expiresIn is missing or invalid
+      const expiresInSeconds = typeof expiresIn === "number" && expiresIn > 0 
+        ? expiresIn 
+        : 60 * 24 * 60 * 60; // 60 days in seconds
+      const newTokenExpiresAt = new Date(Date.now() + expiresInSeconds * 1000);
 
       // Update the token in the database
       await prisma.instagramAccount.update({
@@ -100,7 +104,7 @@ export async function POST() {
         success: true,
         message: "Token refreshed successfully",
         tokenExpiresAt: newTokenExpiresAt,
-        expiresInDays: Math.floor(expiresIn / (60 * 60 * 24)),
+        expiresInDays: Math.floor(expiresInSeconds / (60 * 60 * 24)),
       });
     } catch (err) {
       if (err instanceof InstagramAPIError) {

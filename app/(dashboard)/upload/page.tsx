@@ -205,7 +205,7 @@ export default function UploadPage() {
       <Modal
         isOpen={!!editingFile && !!editingMeta}
         onClose={() => setEditingFileId(null)}
-        title="Editar imagen"
+        title="Edit image"
         size="xl"
       >
         {editingFile && editingMeta && (

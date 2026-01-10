@@ -44,7 +44,7 @@ export default function ImageDetailPage() {
           const data = await response.json();
           setImage(data.image);
           
-          // Cargar la imagen usando fetch para asegurar que las cookies se envíen
+          // Load image using fetch to ensure cookies are sent
           const imageResponse = await fetch(data.image.secureUrl, {
             credentials: "include",
           });
@@ -299,7 +299,7 @@ export default function ImageDetailPage() {
               onClick={() => setShowDeleteModal(false)}
               className="flex-1"
             >
-              Cancelar
+              Cancel
             </Button>
             <Button
               variant="danger"

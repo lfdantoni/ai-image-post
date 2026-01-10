@@ -63,10 +63,10 @@ export async function POST(request: NextRequest) {
       data: {
         userId: session.user.id,
         publicId: uploadResult.public_id,
-        // Guardar URLs base de Cloudinary (no accesibles directamente)
+        // Save base Cloudinary URLs (not directly accessible)
         url: uploadResult.url,
         secureUrl: uploadResult.secure_url,
-        // Thumbnail se servirá via API proxy
+        // Thumbnail will be served via API proxy
         thumbnailUrl: null,
         width: uploadResult.width,
         height: uploadResult.height,

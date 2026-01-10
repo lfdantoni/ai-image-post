@@ -3,6 +3,16 @@
  * Handles all interactions with Instagram Graph API for publishing content
  */
 
+import {
+  parseInstagramError,
+  getErrorInfo,
+  formatErrorMessage,
+  isRetryable,
+  getRetryDelay,
+  type ParsedInstagramError,
+  type ErrorCategory,
+} from "./instagram-errors";
+
 // =============================================================================
 // Types
 // =============================================================================
@@ -15,13 +25,13 @@ export type ContainerStatus =
   | "PUBLISHED";
 
 export interface CreateMediaParams {
-  imageUrl: string;      // URL pública de la imagen JPEG
-  caption?: string;      // Caption con hashtags
+  imageUrl: string;      // Public URL of the JPEG image
+  caption?: string;      // Caption with hashtags
   isCarouselItem?: boolean;
 }
 
 export interface CarouselParams {
-  childContainerIds: string[];  // IDs de containers de items
+  childContainerIds: string[];  // IDs of item containers
   caption: string;
 }
 
@@ -64,6 +74,12 @@ export interface RateLimitInfo {
 // =============================================================================
 
 export class InstagramAPIError extends Error {
+  public readonly userMessage: string;
+  public readonly category: ErrorCategory;
+  public readonly needsReconnect: boolean;
+  public readonly retryable: boolean;
+  public readonly retryAfterMs?: number;
+
   constructor(
     message: string,
     public code: number | string,
@@ -73,40 +89,120 @@ export class InstagramAPIError extends Error {
   ) {
     super(message);
     this.name = "InstagramAPIError";
+
+    // Get enhanced error info from mapping
+    const errorInfo = getErrorInfo(code, subcode);
+    this.userMessage = errorInfo.userMessage;
+    this.category = errorInfo.category;
+    this.needsReconnect = errorInfo.needsReconnect ?? false;
+    this.retryable = errorInfo.retryable ?? false;
+    this.retryAfterMs = errorInfo.retryAfterSeconds
+      ? errorInfo.retryAfterSeconds * 1000
+      : undefined;
+  }
+
+  /**
+   * Creates an InstagramAPIError from a parsed error
+   */
+  static fromParsedError(parsed: ParsedInstagramError): InstagramAPIError {
+    return new InstagramAPIError(
+      parsed.message,
+      parsed.code,
+      parsed.subcode,
+      parsed.type,
+      parsed.fbTraceId
+    );
+  }
+
+  /**
+   * Gets a user-friendly error message with recovery action
+   */
+  getFormattedMessage(): string {
+    const errorInfo = getErrorInfo(this.code, this.subcode);
+    return formatErrorMessage({
+      code: this.code,
+      subcode: this.subcode,
+      message: this.message,
+      type: this.type,
+      fbTraceId: this.fbTraceId,
+      errorInfo,
+    });
+  }
+
+  /**
+   * Converts to a plain object for API responses
+   */
+  toJSON(): Record<string, unknown> {
+    return {
+      code: this.code,
+      subcode: this.subcode,
+      message: this.userMessage,
+      technicalMessage: this.message,
+      category: this.category,
+      needsReconnect: this.needsReconnect,
+      retryable: this.retryable,
+      retryAfterMs: this.retryAfterMs,
+    };
   }
 }
 
 export class TokenExpiredError extends InstagramAPIError {
-  constructor(message: string = "Access token has expired") {
-    super(message, 190);
+  constructor(message: string = "Access token has expired", subcode?: number) {
+    super(message, 190, subcode);
     this.name = "TokenExpiredError";
   }
 }
 
 export class RateLimitError extends InstagramAPIError {
+  public readonly retryAfter?: Date;
+
   constructor(
     message: string = "Rate limit exceeded",
-    public retryAfter?: Date
+    code: number = 17,
+    retryAfterSeconds?: number
   ) {
-    super(message, 17);
+    super(message, code);
     this.name = "RateLimitError";
+    this.retryAfter = retryAfterSeconds
+      ? new Date(Date.now() + retryAfterSeconds * 1000)
+      : undefined;
   }
 }
 
 export class PermissionError extends InstagramAPIError {
   constructor(
     message: string = "Insufficient permissions",
-    public missingPermissions?: string[]
+    code: number = 10,
+    public missingPermissions?: string[],
+    subcode?: number
   ) {
-    super(message, 10);
+    super(message, code, subcode);
     this.name = "PermissionError";
   }
 }
 
 export class MediaError extends InstagramAPIError {
-  constructor(message: string, code: number | string) {
-    super(message, code);
+  constructor(message: string, code: number | string, subcode?: number) {
+    super(message, code, subcode);
     this.name = "MediaError";
+  }
+}
+
+export class ValidationError extends InstagramAPIError {
+  constructor(message: string, code: string = "VALIDATION_ERROR") {
+    super(message, code);
+    this.name = "ValidationError";
+  }
+}
+
+export class ContainerProcessingError extends InstagramAPIError {
+  constructor(
+    message: string,
+    public containerId: string,
+    public status?: ContainerStatus
+  ) {
+    super(message, "CONTAINER_ERROR");
+    this.name = "ContainerProcessingError";
   }
 }
 
@@ -174,31 +270,88 @@ export class InstagramAPIService {
     error_subcode?: number;
     type?: string;
     fbtrace_id?: string;
+    is_transient?: boolean;
   }): never {
-    const { message = "Unknown error", code, error_subcode, type, fbtrace_id } = error;
+    // Parse the error using our comprehensive error mapping
+    const parsed = parseInstagramError(error);
+    const { code, subcode, message, type, fbTraceId } = parsed;
+    const { category } = parsed.errorInfo;
 
-    // Token expired
-    if (code === 190) {
-      throw new TokenExpiredError(message);
+    // Token expired (code 190 and related subcodes)
+    if (code === 190 || category === "AUTH") {
+      throw new TokenExpiredError(message, subcode);
     }
 
-    // Rate limit exceeded
-    if (code === 4 || code === 17) {
-      throw new RateLimitError(message);
+    // Rate limit exceeded (codes 4, 17, 21, 341, 9004)
+    if (category === "RATE_LIMIT") {
+      const retryAfterSeconds = parsed.errorInfo.retryAfterSeconds;
+      throw new RateLimitError(
+        message,
+        typeof code === "number" ? code : 17,
+        retryAfterSeconds
+      );
     }
 
-    // Permission denied
-    if (code === 10 || code === 200) {
-      throw new PermissionError(message);
+    // Permission denied (codes 10, 200, and permission subcodes)
+    if (category === "PERMISSION") {
+      throw new PermissionError(
+        message,
+        typeof code === "number" ? code : 10,
+        undefined,
+        subcode
+      );
     }
 
-    // Media processing errors
-    if (code === 36000 || code === 36003 || code === 2207001) {
-      throw new MediaError(message, code);
+    // Media processing errors (2207xxx, 36xxx codes)
+    if (category === "MEDIA") {
+      throw new MediaError(message, code, subcode);
     }
 
-    // Generic error
-    throw new InstagramAPIError(message, code || "UNKNOWN", error_subcode, type, fbtrace_id);
+    // Validation errors
+    if (category === "VALIDATION") {
+      throw new ValidationError(message, String(code));
+    }
+
+    // Generic error with enhanced info
+    throw new InstagramAPIError(message, code, subcode, type, fbTraceId);
+  }
+
+  /**
+   * Wraps an async operation with retry logic for transient errors
+   */
+  private async withRetry<T>(
+    operation: () => Promise<T>,
+    maxRetries: number = 3,
+    initialDelayMs: number = 1000
+  ): Promise<T> {
+    let lastError: Error | undefined;
+    let delay = initialDelayMs;
+
+    for (let attempt = 0; attempt <= maxRetries; attempt++) {
+      try {
+        return await operation();
+      } catch (error) {
+        lastError = error as Error;
+
+        // Check if error is retryable
+        if (error instanceof InstagramAPIError && error.retryable && attempt < maxRetries) {
+          // Use the error's recommended retry delay if available
+          const retryDelay = error.retryAfterMs || delay;
+          console.log(
+            `Instagram API error (attempt ${attempt + 1}/${maxRetries + 1}): ${error.message}. Retrying in ${retryDelay}ms...`
+          );
+          await this.delay(retryDelay);
+          delay *= 2; // Exponential backoff
+          continue;
+        }
+
+        // Non-retryable error or max retries reached
+        throw error;
+      }
+    }
+
+    // This should never be reached, but TypeScript needs it
+    throw lastError;
   }
 
   /**
@@ -262,30 +415,44 @@ export class InstagramAPIService {
   async waitForContainerReady(
     containerId: string,
     maxWaitMs: number = 120000
-  ): Promise<boolean> {
+  ): Promise<{ ready: boolean; status: ContainerStatus }> {
     const pollInterval = 5000; // 5 seconds
     const startTime = Date.now();
+    let lastStatus: ContainerStatus = "IN_PROGRESS";
 
     while (Date.now() - startTime < maxWaitMs) {
-      const status = await this.checkContainerStatus(containerId);
+      lastStatus = await this.checkContainerStatus(containerId);
 
-      switch (status) {
+      switch (lastStatus) {
         case "FINISHED":
-          return true;
+          return { ready: true, status: lastStatus };
         case "ERROR":
+          throw new ContainerProcessingError(
+            "Media container processing failed",
+            containerId,
+            lastStatus
+          );
         case "EXPIRED":
-          return false;
+          throw new ContainerProcessingError(
+            "Media container has expired. Please try again.",
+            containerId,
+            lastStatus
+          );
         case "IN_PROGRESS":
           await this.delay(pollInterval);
           break;
         case "PUBLISHED":
           // Already published, this shouldn't happen in normal flow
-          return true;
+          return { ready: true, status: lastStatus };
       }
     }
 
     // Timeout reached
-    return false;
+    throw new ContainerProcessingError(
+      `Media container processing timed out after ${maxWaitMs / 1000} seconds`,
+      containerId,
+      lastStatus
+    );
   }
 
   /**
@@ -371,32 +538,50 @@ export class InstagramAPIService {
     caption: string
   ): Promise<{ mediaId: string; permalink: string }> {
     if (imageUrls.length < 2) {
-      throw new MediaError("Carousel requires at least 2 images", "INVALID_CAROUSEL");
+      throw new ValidationError(
+        "Carousel requires at least 2 images",
+        "INVALID_CAROUSEL"
+      );
     }
 
     if (imageUrls.length > 10) {
-      throw new MediaError("Carousel cannot have more than 10 images", "INVALID_CAROUSEL");
+      throw new ValidationError(
+        "Carousel cannot have more than 10 images",
+        "INVALID_CAROUSEL"
+      );
     }
 
-    // Step 1: Create containers for each image
+    // Step 1: Create containers for each image with retry logic
     const childContainerIds: string[] = [];
-    for (const imageUrl of imageUrls) {
-      const containerId = await this.createMediaContainer({
-        imageUrl,
-        isCarouselItem: true,
-      });
-      childContainerIds.push(containerId);
+    for (let i = 0; i < imageUrls.length; i++) {
+      const imageUrl = imageUrls[i];
+      try {
+        const containerId = await this.withRetry(
+          () => this.createMediaContainer({
+            imageUrl,
+            isCarouselItem: true,
+          }),
+          2 // Max 2 retries for container creation
+        );
+        childContainerIds.push(containerId);
+      } catch (error) {
+        // Add context about which image failed
+        if (error instanceof InstagramAPIError) {
+          throw new MediaError(
+            `Failed to create container for image ${i + 1}: ${error.message}`,
+            error.code,
+            error.subcode
+          );
+        }
+        throw error;
+      }
     }
 
     // Step 2: Wait for all child containers to be ready
-    for (const containerId of childContainerIds) {
-      const isReady = await this.waitForContainerReady(containerId);
-      if (!isReady) {
-        throw new MediaError(
-          `Carousel item container ${containerId} failed to process`,
-          "CONTAINER_ERROR"
-        );
-      }
+    for (let i = 0; i < childContainerIds.length; i++) {
+      const containerId = childContainerIds[i];
+      // waitForContainerReady now throws on error, so no need to check return value
+      await this.waitForContainerReady(containerId);
     }
 
     // Step 3: Create carousel container
@@ -406,10 +591,7 @@ export class InstagramAPIService {
     });
 
     // Step 4: Wait for carousel container to be ready
-    const isCarouselReady = await this.waitForContainerReady(carouselContainerId);
-    if (!isCarouselReady) {
-      throw new MediaError("Carousel container failed to process", "CONTAINER_ERROR");
-    }
+    await this.waitForContainerReady(carouselContainerId);
 
     // Step 5: Publish the carousel
     const mediaId = await this.publishMedia(carouselContainerId);
@@ -431,20 +613,24 @@ export class InstagramAPIService {
     imageUrl: string,
     caption: string
   ): Promise<{ mediaId: string; permalink: string }> {
-    // Step 1: Create media container
-    const containerId = await this.createMediaContainer({
-      imageUrl,
-      caption,
-    });
+    // Step 1: Create media container with retry logic
+    const containerId = await this.withRetry(
+      () => this.createMediaContainer({
+        imageUrl,
+        caption,
+      }),
+      2 // Max 2 retries for container creation
+    );
 
     // Step 2: Wait for container to be ready
-    const isReady = await this.waitForContainerReady(containerId);
-    if (!isReady) {
-      throw new MediaError("Media container failed to process", "CONTAINER_ERROR");
-    }
+    // waitForContainerReady now throws on error
+    await this.waitForContainerReady(containerId);
 
-    // Step 3: Publish
-    const mediaId = await this.publishMedia(containerId);
+    // Step 3: Publish with retry logic
+    const mediaId = await this.withRetry(
+      () => this.publishMedia(containerId),
+      2 // Max 2 retries for publishing
+    );
 
     // Step 4: Get permalink
     const details = await this.getMediaDetails(mediaId);
@@ -593,13 +779,9 @@ export class InstagramAPIService {
     const data = await response.json();
 
     if (data.error) {
-      throw new InstagramAPIError(
-        data.error.message,
-        data.error.code,
-        data.error.error_subcode,
-        data.error.type,
-        data.error.fbtrace_id
-      );
+      // Use error parsing for consistent error handling
+      const parsed = parseInstagramError(data.error);
+      throw InstagramAPIError.fromParsedError(parsed);
     }
 
     return {
@@ -628,13 +810,9 @@ export class InstagramAPIService {
     const data = await response.json();
 
     if (data.error) {
-      throw new InstagramAPIError(
-        data.error.message,
-        data.error.code,
-        data.error.error_subcode,
-        data.error.type,
-        data.error.fbtrace_id
-      );
+      // Use error parsing for consistent error handling
+      const parsed = parseInstagramError(data.error);
+      throw InstagramAPIError.fromParsedError(parsed);
     }
 
     return {
@@ -659,13 +837,9 @@ export class InstagramAPIService {
     const data = await response.json();
 
     if (data.error) {
-      throw new InstagramAPIError(
-        data.error.message,
-        data.error.code,
-        data.error.error_subcode,
-        data.error.type,
-        data.error.fbtrace_id
-      );
+      // Use error parsing for consistent error handling
+      const parsed = parseInstagramError(data.error);
+      throw InstagramAPIError.fromParsedError(parsed);
     }
 
     return data.data.map((page: { id: string; name: string; access_token: string }) => ({
@@ -691,13 +865,9 @@ export class InstagramAPIService {
     const data = await response.json();
 
     if (data.error) {
-      throw new InstagramAPIError(
-        data.error.message,
-        data.error.code,
-        data.error.error_subcode,
-        data.error.type,
-        data.error.fbtrace_id
-      );
+      // Use error parsing for consistent error handling
+      const parsed = parseInstagramError(data.error);
+      throw InstagramAPIError.fromParsedError(parsed);
     }
 
     if (!data.instagram_business_account) {
@@ -710,6 +880,29 @@ export class InstagramAPIService {
     };
   }
 }
+
+// =============================================================================
+// Re-exports from instagram-errors for convenience
+// =============================================================================
+
+export {
+  parseInstagramError,
+  getErrorInfo,
+  formatErrorMessage,
+  isRetryable,
+  getRetryDelay,
+  isRateLimitError,
+  isAuthError,
+  isMediaError,
+  requiresReconnect,
+  buildErrorResponse,
+  createDailyLimitError,
+  type ParsedInstagramError,
+  type InstagramErrorInfo,
+  type ErrorCategory,
+  type ErrorSeverity,
+  type APIErrorResponse,
+} from "./instagram-errors";
 
 // =============================================================================
 // Export default instance factory

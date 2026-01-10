@@ -104,7 +104,7 @@ export function usePublishToInstagram(): UsePublishToInstagramReturn {
         const data = await response.json();
 
         if (!response.ok) {
-          // Extraer información de error del objeto retornado por la API
+          // Extract error information from the object returned by the API
           const errorData = data.error || {};
           
           const publishError: PublishError = {

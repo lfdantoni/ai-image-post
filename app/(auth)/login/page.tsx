@@ -30,10 +30,10 @@ export default async function LoginPage() {
             <div className="space-y-6">
               <div className="text-center">
                 <h2 className="text-xl font-semibold text-gray-900">
-                  Bienvenido
+                  Welcome
                 </h2>
                 <p className="mt-1 text-sm text-gray-500">
-                  Inicia sesión para continuar
+                  Sign in to continue
                 </p>
               </div>
 

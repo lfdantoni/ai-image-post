@@ -10,6 +10,10 @@ import {
   RateLimitError,
   PermissionError,
   MediaError,
+  ValidationError,
+  ContainerProcessingError,
+  buildErrorResponse,
+  createDailyLimitError,
 } from "@/lib/instagram-api";
 import {
   validateForInstagram,
@@ -250,70 +254,42 @@ export async function POST(request: NextRequest) {
       }
     } catch (err) {
       console.log("PUBLISH ERROR:", err);
-      // Handle specific Instagram API errors
-      if (err instanceof TokenExpiredError) {
-        return NextResponse.json(
-          {
-            success: false,
-            error: {
-              code: "TOKEN_EXPIRED",
-              message: "Instagram access token has expired. Please reconnect your account.",
-            },
-          },
-          { status: 400 }
-        );
-      }
 
-      if (err instanceof RateLimitError) {
-        return NextResponse.json(
-          {
-            success: false,
-            error: {
-              code: "RATE_LIMIT_EXCEEDED",
-              message: "Instagram rate limit exceeded. Please try again later.",
-            },
-          },
-          { status: 429 }
-        );
-      }
-
-      if (err instanceof PermissionError) {
-        return NextResponse.json(
-          {
-            success: false,
-            error: {
-              code: "PERMISSION_DENIED",
-              message: "Missing Instagram publishing permissions. Please reconnect your account.",
-            },
-          },
-          { status: 403 }
-        );
-      }
-
-      if (err instanceof MediaError) {
-        return NextResponse.json(
-          {
-            success: false,
-            error: {
-              code: "MEDIA_ERROR",
-              message: err.message,
-            },
-          },
-          { status: 400 }
-        );
-      }
-
+      // All Instagram errors now have enhanced properties
       if (err instanceof InstagramAPIError) {
-        return NextResponse.json(
-          {
-            success: false,
-            error: {
-              code: "INSTAGRAM_API_ERROR",
-              message: err.message,
-            },
+        const errorResponse = {
+          success: false,
+          error: {
+            code: err.code,
+            message: err.userMessage,
+            technicalMessage: err.message,
+            category: err.category,
+            needsReconnect: err.needsReconnect,
+            retryable: err.retryable,
           },
-          { status: 400 }
-        );
+          needsReconnect: err.needsReconnect,
+        };
+
+        // Determine appropriate HTTP status code based on error type
+        let statusCode = 400;
+
+        if (err instanceof TokenExpiredError) {
+          statusCode = 401; // Unauthorized
+        } else if (err instanceof RateLimitError) {
+          statusCode = 429; // Too Many Requests
+        } else if (err instanceof PermissionError) {
+          statusCode = 403; // Forbidden
+        } else if (err instanceof MediaError || err instanceof ValidationError) {
+          statusCode = 400; // Bad Request
+        } else if (err instanceof ContainerProcessingError) {
+          statusCode = 422; // Unprocessable Entity
+        } else if (err.category === "SERVER") {
+          statusCode = 502; // Bad Gateway (Instagram server error)
+        } else if (err.category === "NETWORK") {
+          statusCode = 503; // Service Unavailable
+        }
+
+        return NextResponse.json(errorResponse, { status: statusCode });
       }
 
       throw err;
@@ -377,13 +353,17 @@ export async function POST(request: NextRequest) {
     });
   } catch (error) {
     console.error("Error publishing to Instagram:", error);
+
+    // Use the standardized error response builder
+    const errorResponse = buildErrorResponse(
+      error,
+      "An unexpected error occurred while publishing."
+    );
+
     return NextResponse.json(
       {
         success: false,
-        error: {
-          code: "INTERNAL_ERROR",
-          message: "An unexpected error occurred while publishing.",
-        },
+        ...errorResponse,
       },
       { status: 500 }
     );

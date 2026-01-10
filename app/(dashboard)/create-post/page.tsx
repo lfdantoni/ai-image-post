@@ -93,16 +93,16 @@ function CreatePostContent() {
     reset: resetPublish,
   } = usePublishToInstagram();
 
-  // Sincronizar currentPostId con editPostId cuando cambia
+  // Sync currentPostId with editPostId when it changes
   useEffect(() => {
     if (editPostId) {
       setCurrentPostId(editPostId);
     } else {
-      // Si se elimina el postId de la URL, limpiar currentPostId
+      // If postId is removed from URL, clear currentPostId
       setCurrentPostId(null);
     }
 
-    // Si no hay imágenes ni postId, resetear el estado completo
+    // If there are no images or postId, reset the complete state
     if (!editPostId && imageIds.length === 0) {
       setImages([]);
       setCaption("");
@@ -146,7 +146,7 @@ function CreatePostContent() {
           const data = await response.json();
           const post = data.post;
           if (post) {
-            setCurrentPostId(post.id); // Establecer el ID del post cargado
+            setCurrentPostId(post.id); // Set the loaded post ID
             const loadedCaption = post.caption || "";
             const loadedHashtags = post.hashtags || [];
             setCaption(loadedCaption);
@@ -155,7 +155,7 @@ function CreatePostContent() {
             const postImages = post.images.map((pi: { image: ImageData }) => pi.image);
             setImages(postImages);
             
-            // Guardar datos originales para comparar cambios
+            // Save original data to compare changes
             setOriginalPostData({
               caption: loadedCaption,
               hashtags: loadedHashtags,
@@ -177,7 +177,7 @@ function CreatePostContent() {
   // Load images (only if not editing an existing post)
   useEffect(() => {
     const loadImages = async () => {
-      // Si estamos editando un post, no cargar imágenes desde imageIds
+      // If we're editing a post, don't load images from imageIds
       if (editPostId) {
         setIsLoading(false);
         return;
@@ -185,7 +185,7 @@ function CreatePostContent() {
 
       if (imageIds.length === 0) {
         setIsLoading(false);
-        setOriginalPostData(null); // Limpiar datos originales si no hay imágenes
+        setOriginalPostData(null); // Clear original data if there are no images
         return;
       }
 
@@ -200,8 +200,8 @@ function CreatePostContent() {
           .filter((img): img is ImageData => img?.id !== undefined);
         setImages(loadedImages);
         
-        // Inicializar datos originales como vacíos cuando se cargan nuevas imágenes
-        // Solo si no hay datos originales ya establecidos
+        // Initialize original data as empty when loading new images
+        // Only if there's no original data already set
         setOriginalPostData((prev) => {
           if (!prev) {
             return {
@@ -296,14 +296,14 @@ function CreatePostContent() {
         const savedPostId = data.post.id;
         setCurrentPostId(savedPostId);
         
-        // Actualizar datos originales después de guardar
+        // Update original data after saving
         setOriginalPostData({
           caption: caption,
           hashtags: hashtags,
           imageIds: imageIds,
         });
         
-        // Actualizar la URL para incluir el postId si no estaba presente
+        // Update URL to include postId if it wasn't present
         if (!editPostId && savedPostId) {
           const currentUrl = new URL(window.location.href);
           currentUrl.searchParams.set("postId", savedPostId);
@@ -418,7 +418,7 @@ function CreatePostContent() {
     router.push(`/create-post?publishedPostId=${publishedPostId}`);
   };
 
-  // Determinar si estamos en la página inicial (sin parámetros)
+  // Determine if we're on the initial page (without parameters)
   const isInitialPage = !editPostId && imageIds.length === 0;
 
   if (isLoading) {
@@ -510,7 +510,7 @@ function CreatePostContent() {
                       onClick={() => handleEditDraft(draft)}
                     >
                       <Edit3 className="w-3 h-3 mr-1" />
-                      Editar
+                      Edit
                     </Button>
                     <Button
                       variant="ghost"
@@ -775,26 +775,26 @@ function CreatePostContent() {
       <Modal
         isOpen={showUnsavedChangesModal}
         onClose={() => setShowUnsavedChangesModal(false)}
-        title="Cambios sin guardar"
+        title="Unsaved changes"
         size="md"
       >
         <div className="p-6 space-y-4">
           <p className="text-gray-600">
-            Tienes cambios sin guardar. ¿Qué deseas hacer?
+            You have unsaved changes. What would you like to do?
           </p>
           <div className="flex gap-3 justify-end">
             <Button
               variant="outline"
               onClick={() => setShowUnsavedChangesModal(false)}
             >
-              Cancelar
+              Cancel
             </Button>
             <Button
               variant="ghost"
               onClick={handleDiscardAndGoBack}
               className="text-red-600 hover:text-red-700 hover:bg-red-50"
             >
-              Descartar
+              Discard
             </Button>
             <Button
               onClick={handleSaveAndGoBack}
@@ -803,12 +803,12 @@ function CreatePostContent() {
               {isSaving ? (
                 <>
                   <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                  Guardando...
+                  Saving...
                 </>
               ) : (
                 <>
                   <Save className="w-4 h-4 mr-2" />
-                  Guardar y salir
+                  Save and exit
                 </>
               )}
             </Button>

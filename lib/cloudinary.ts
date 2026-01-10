@@ -14,12 +14,12 @@ export const CLOUDINARY_FOLDERS = {
   processed: "aigram/processed",
 };
 
-// Duración de las URLs firmadas (1 hora en segundos)
+// Duration of signed URLs (1 hour in seconds)
 const SIGNED_URL_EXPIRATION = 60 * 60;
 
 /**
- * Genera una URL firmada para acceder a una imagen privada
- * Usado internamente por el servidor para obtener imágenes de Cloudinary
+ * Generates a signed URL to access a private image
+ * Used internally by the server to fetch images from Cloudinary
  */
 export function generatePrivateUrl(
   publicId: string,
@@ -43,7 +43,7 @@ export function generatePrivateUrl(
 }
 
 /**
- * Genera una URL firmada para thumbnail (uso interno del servidor)
+ * Generates a signed URL for thumbnail (internal server use)
  */
 export function generatePrivateThumbnailUrl(publicId: string): string {
   return generatePrivateUrl(publicId, {
@@ -56,8 +56,8 @@ export function generatePrivateThumbnailUrl(publicId: string): string {
 }
 
 /**
- * Genera URLs del proxy interno para una imagen
- * Estas URLs son las que se envían al cliente
+ * Generates internal proxy URLs for an image
+ * These URLs are sent to the client
  */
 export function generateProxyUrls(imageId: string): {
   url: string;
@@ -72,9 +72,9 @@ export function generateProxyUrls(imageId: string): {
 }
 
 /**
- * Genera una URL pública temporal para Instagram
- * Instagram requiere que las imágenes estén en URLs públicamente accesibles
- * Esta URL es firmada y expira después de un tiempo (2 horas para dar tiempo al proceso)
+ * Generates a temporary public URL for Instagram
+ * Instagram requires images to be on publicly accessible URLs
+ * This URL is signed and expires after a period (2 hours to allow for processing)
  */
 export function generateInstagramPublishUrl(
   publicId: string,
@@ -104,7 +104,7 @@ export function generateInstagramPublishUrl(
 }
 
 /**
- * Genera múltiples URLs públicas temporales para un carrusel de Instagram
+ * Generates multiple temporary public URLs for an Instagram carousel
  */
 export function generateInstagramCarouselUrls(
   publicIds: string[],

@@ -100,7 +100,7 @@ model Image {
 
   // Google Drive sync
   driveFileId           String?    // ID del archivo exportado en Drive
-  driveExportedAt       DateTime?  // Última vez que se exportó a Drive
+  driveExportedAt       DateTime?  // Last time it was exported to Drive
   driveBackupId         String?    // ID del backup original en Drive
 
   // Timestamps
@@ -143,7 +143,7 @@ model Post {
   // Status
   status          PostStatus @default(DRAFT)
 
-  // Relación con publicación en Instagram
+  // Relationship with Instagram publication
   publishedPost   PublishedPost?
 
   // Timestamps
@@ -203,7 +203,7 @@ model ExportLog {
   driveFolderId   String?
 
   options         Json     // opciones usadas
-  fileSize        Int      // tamaño final en bytes
+  fileSize        Int      // final size in bytes
 
   createdAt       DateTime @default(now())
 
@@ -266,7 +266,7 @@ model PublishedPost {
   hashtags                String[]
   thumbnailUrl            String?
 
-  // Métricas
+  // Metrics
   likesCount              Int       @default(0)
   commentsCount           Int       @default(0)
   reachCount              Int?
