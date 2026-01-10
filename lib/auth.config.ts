@@ -12,8 +12,9 @@ export const authConfig: NextAuthConfig = {
       const isOnGallery = nextUrl.pathname.startsWith("/gallery");
       const isOnUpload = nextUrl.pathname.startsWith("/upload");
       const isOnImage = nextUrl.pathname.startsWith("/image");
+      const isCreatePost = nextUrl.pathname.startsWith("/create-post");
 
-      const protectedRoutes = isOnDashboard || isOnGallery || isOnUpload || isOnImage;
+      const protectedRoutes = isOnDashboard || isOnGallery || isOnUpload || isOnImage || isCreatePost;
 
       if (protectedRoutes) {
         if (isLoggedIn) return true;

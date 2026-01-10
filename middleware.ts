@@ -9,5 +9,6 @@ export const config = {
     "/gallery/:path*",
     "/upload/:path*",
     "/image/:path*",
+    "/create-post/:path*",
   ],
 };
