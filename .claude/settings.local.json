@@ -10,7 +10,9 @@
       "Bash(git remote:*)",
       "mcp__github__get_me",
       "mcp__github__issue_write",
-      "mcp__github__issue_read"
+      "mcp__github__issue_read",
+      "Bash(npx prisma db push:*)",
+      "mcp__github__add_issue_comment"
     ]
   }
 }

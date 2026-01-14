@@ -15,7 +15,8 @@ import {
   Link2,
   User,
   Clock,
-  Info,
+  Star,
+  Plus,
 } from "lucide-react";
 import { useSearchParams, useRouter } from "next/navigation";
 import { cn } from "@/lib/utils";
@@ -33,19 +34,25 @@ export function InstagramSettings({ onConnectionChange }: InstagramSettingsProps
     isConnected,
     isLoading,
     error,
-    account,
+    accounts,
+    activeAccount,
     rateLimit,
     permissions,
     hasPublishPermission,
     connect,
     disconnect,
+    setDefaultAccount,
     refreshStatus,
     refreshToken,
   } = useInstagramConnection();
 
-  const [isDisconnecting, setIsDisconnecting] = useState(false);
-  const [isRefreshingToken, setIsRefreshingToken] = useState(false);
-  const [showDisconnectConfirm, setShowDisconnectConfirm] = useState(false);
+  const [isDisconnecting, setIsDisconnecting] = useState<string | null>(null);
+  const [isRefreshingToken, setIsRefreshingToken] = useState<string | null>(null);
+  const [isSettingDefault, setIsSettingDefault] = useState<string | null>(null);
+  const [disconnectConfirm, setDisconnectConfirm] = useState<{
+    accountId: string;
+    username: string;
+  } | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
 
   // Check for URL parameters on mount
@@ -55,12 +62,10 @@ export function InstagramSettings({ onConnectionChange }: InstagramSettingsProps
 
     if (success) {
       setSuccessMessage(decodeURIComponent(success));
-      refreshStatus(); // Force status refresh
-      // Clear URL params without reloading
+      refreshStatus();
       const newUrl = window.location.pathname;
       router.replace(newUrl);
     } else if (errorParam) {
-      // hook should handle errors via API status but we can show this one too
       console.error("Instagram error from URL:", errorParam);
     }
   }, [searchParams, refreshStatus, router]);
@@ -69,34 +74,31 @@ export function InstagramSettings({ onConnectionChange }: InstagramSettingsProps
     connect();
   };
 
-  const handleDisconnect = async () => {
-    setIsDisconnecting(true);
-    await disconnect();
-    setIsDisconnecting(false);
-    setShowDisconnectConfirm(false);
-    onConnectionChange?.(false);
+  const handleDisconnect = async (accountId: string) => {
+    setIsDisconnecting(accountId);
+    await disconnect(accountId);
+    setIsDisconnecting(null);
+    setDisconnectConfirm(null);
+    if (accounts.length <= 1) {
+      onConnectionChange?.(false);
+    }
   };
 
-  const handleRefreshToken = async () => {
-    setIsRefreshingToken(true);
-    const success = await refreshToken();
-    setIsRefreshingToken(false);
+  const handleSetDefault = async (accountId: string) => {
+    setIsSettingDefault(accountId);
+    await setDefaultAccount(accountId);
+    setIsSettingDefault(null);
+  };
+
+  const handleRefreshToken = async (accountId: string) => {
+    setIsRefreshingToken(accountId);
+    const success = await refreshToken(accountId);
+    setIsRefreshingToken(null);
     if (success) {
       onConnectionChange?.(true);
     }
   };
 
-  // Calculate rate limit percentage
-  const rateLimitPercentage = rateLimit
-    ? Math.min((rateLimit.used / 25) * 100, 100)
-    : 0;
-
-  // Check if token is expiring soon (less than 7 days)
-  const isTokenExpiringSoon =
-    account?.tokenExpiresAt &&
-    new Date(account.tokenExpiresAt).getTime() - Date.now() < 7 * 24 * 60 * 60 * 1000;
-
-  // Format date
   const formatDate = (date: Date | string) => {
     return new Date(date).toLocaleDateString("es-ES", {
       day: "numeric",
@@ -105,7 +107,6 @@ export function InstagramSettings({ onConnectionChange }: InstagramSettingsProps
     });
   };
 
-  // Format time remaining
   const formatTimeRemaining = (date: Date) => {
     const diff = new Date(date).getTime() - Date.now();
     if (diff <= 0) return "Expired";
@@ -127,10 +128,18 @@ export function InstagramSettings({ onConnectionChange }: InstagramSettingsProps
         </div>
       )}
 
+      {/* Error Message */}
+      {error && (
+        <div className="flex items-start gap-2 p-3 bg-red-50 rounded-lg text-sm text-red-700 animate-in fade-in slide-in-from-top-1">
+          <AlertTriangle className="w-4 h-4 flex-shrink-0 mt-0.5" />
+          <p>{error}</p>
+        </div>
+      )}
+
       {/* Connection Status */}
       <div className="p-4 bg-white border border-gray-200 rounded-lg">
         <h3 className="text-sm font-medium text-gray-900 mb-4">
-          Connection Status
+          Connected Accounts
         </h3>
 
         {isLoading ? (
@@ -138,129 +147,181 @@ export function InstagramSettings({ onConnectionChange }: InstagramSettingsProps
             <Loader2 className="w-5 h-5 animate-spin" />
             <span className="text-sm">Checking connection...</span>
           </div>
-        ) : isConnected && account ? (
+        ) : isConnected && accounts.length > 0 ? (
           <div className="space-y-4">
-            {/* Connected Info */}
-            <div className="flex items-center gap-3">
-              {account.profilePicture ? (
-                <img
-                  src={account.profilePicture}
-                  alt={account.username}
-                  className="w-12 h-12 rounded-full"
-                />
-              ) : (
-                <div className="w-12 h-12 rounded-full bg-gradient-to-br from-purple-500 to-pink-500 flex items-center justify-center">
-                  <Instagram className="w-6 h-6 text-white" />
+            {/* Accounts List */}
+            {accounts.map((account) => {
+              const isTokenExpiringSoon = account.token.expiringSoon;
+              const isThisRefreshing = isRefreshingToken === account.id;
+              const isThisSettingDefault = isSettingDefault === account.id;
+
+              return (
+                <div
+                  key={account.id}
+                  className={cn(
+                    "p-4 rounded-lg border transition-colors",
+                    account.isDefault
+                      ? "border-purple-200 bg-purple-50/50"
+                      : "border-gray-200 bg-gray-50/50"
+                  )}
+                >
+                  {/* Account Header */}
+                  <div className="flex items-start justify-between">
+                    <div className="flex items-center gap-3">
+                      {account.profilePicture ? (
+                        <img
+                          src={account.profilePicture}
+                          alt={account.username}
+                          className="w-12 h-12 rounded-full"
+                        />
+                      ) : (
+                        <div className="w-12 h-12 rounded-full bg-gradient-to-br from-purple-500 to-pink-500 flex items-center justify-center">
+                          <Instagram className="w-6 h-6 text-white" />
+                        </div>
+                      )}
+                      <div>
+                        <p className="text-sm font-medium text-gray-900 flex items-center gap-2">
+                          @{account.username}
+                          <Check className="w-4 h-4 text-green-500" />
+                          {account.isDefault && (
+                            <span className="inline-flex items-center gap-1 px-2 py-0.5 text-xs font-medium bg-purple-100 text-purple-700 rounded-full">
+                              <Star className="w-3 h-3" />
+                              Default
+                            </span>
+                          )}
+                        </p>
+                        <p className="text-sm text-gray-500 capitalize">
+                          {account.accountType.replace("_", " ")} Account
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Account Details */}
+                  <div className="mt-3 space-y-2 py-2 px-3 bg-white/50 rounded-lg">
+                    {account.facebookPage && (
+                      <div className="flex items-center gap-2 text-sm text-gray-600">
+                        <Link2 className="w-4 h-4" />
+                        <span>Facebook Page: {account.facebookPage.name}</span>
+                      </div>
+                    )}
+                    <div className="flex items-center gap-2 text-sm text-gray-600">
+                      <Calendar className="w-4 h-4" />
+                      <span>Connected: {formatDate(account.connectedAt)}</span>
+                    </div>
+                    <div
+                      className={cn(
+                        "flex items-center gap-2 text-sm",
+                        isTokenExpiringSoon ? "text-amber-600" : "text-gray-600"
+                      )}
+                    >
+                      <Clock className="w-4 h-4" />
+                      <span>
+                        Token expires: {formatDate(account.token.expiresAt)}
+                        {isTokenExpiringSoon && " (expiring soon!)"}
+                      </span>
+                    </div>
+                    {account.rateLimit && (
+                      <div className="flex items-center gap-2 text-sm text-gray-600">
+                        <TrendingUp className="w-4 h-4" />
+                        <span>
+                          Posts today: {account.rateLimit.used}/25 ({account.rateLimit.remaining} remaining)
+                        </span>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Token Warning */}
+                  {isTokenExpiringSoon && (
+                    <div className="mt-3 flex items-start gap-2 p-3 bg-amber-50 rounded-lg text-sm text-amber-700">
+                      <AlertTriangle className="w-4 h-4 flex-shrink-0 mt-0.5" />
+                      <p>
+                        Token expiring in {formatTimeRemaining(account.token.expiresAt)}.
+                        Refresh it to maintain publishing access.
+                      </p>
+                    </div>
+                  )}
+
+                  {/* Account Actions */}
+                  <div className="mt-3 flex flex-wrap gap-2">
+                    <a
+                      href={`https://instagram.com/${account.username}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="inline-flex items-center gap-1 text-sm text-blue-600 hover:text-blue-700"
+                    >
+                      View profile
+                      <ExternalLink className="w-3 h-3" />
+                    </a>
+                  </div>
+
+                  <div className="mt-3 flex flex-wrap gap-2 pt-3 border-t border-gray-200/50">
+                    {!account.isDefault && (
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => handleSetDefault(account.id)}
+                        disabled={isThisSettingDefault}
+                      >
+                        {isThisSettingDefault ? (
+                          <>
+                            <Loader2 className="w-4 h-4 mr-1 animate-spin" />
+                            Setting...
+                          </>
+                        ) : (
+                          <>
+                            <Star className="w-4 h-4 mr-1" />
+                            Set as Default
+                          </>
+                        )}
+                      </Button>
+                    )}
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => handleRefreshToken(account.id)}
+                      disabled={isThisRefreshing}
+                    >
+                      {isThisRefreshing ? (
+                        <>
+                          <Loader2 className="w-4 h-4 mr-1 animate-spin" />
+                          Refreshing...
+                        </>
+                      ) : (
+                        <>
+                          <RefreshCw className="w-4 h-4 mr-1" />
+                          Refresh Token
+                        </>
+                      )}
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() =>
+                        setDisconnectConfirm({
+                          accountId: account.id,
+                          username: account.username,
+                        })
+                      }
+                      className="text-red-600 hover:text-red-700 hover:bg-red-50"
+                    >
+                      <LogOut className="w-4 h-4 mr-1" />
+                      Disconnect
+                    </Button>
+                  </div>
                 </div>
-              )}
-              <div>
-                <p className="text-sm font-medium text-gray-900 flex items-center gap-2">
-                  @{account.username}
-                  <Check className="w-4 h-4 text-green-500" />
-                </p>
-                <p className="text-sm text-gray-500 capitalize">
-                  {account.accountType.replace("_", " ")} Account
-                </p>
-              </div>
-            </div>
+              );
+            })}
 
-            {/* Account Details */}
-            <div className="space-y-2 py-2 px-3 bg-gray-50 rounded-lg">
-              {account.facebookPage && (
-                <div className="flex items-center gap-2 text-sm text-gray-600">
-                  <Link2 className="w-4 h-4" />
-                  <span>Facebook Page: {account.facebookPage.name}</span>
-                </div>
-              )}
-              <div className="flex items-center gap-2 text-sm text-gray-600">
-                <Calendar className="w-4 h-4" />
-                <span>Connected: {formatDate(account.connectedAt)}</span>
-              </div>
-              <div className={cn(
-                "flex items-center gap-2 text-sm",
-                isTokenExpiringSoon ? "text-amber-600" : "text-gray-600"
-              )}>
-                <Clock className="w-4 h-4" />
-                <span>
-                  Token expires: {formatDate(account.tokenExpiresAt)}
-                  {isTokenExpiringSoon && " (expiring soon!)"}
-                </span>
-              </div>
-            </div>
-
-            {/* Token Warning */}
-            {isTokenExpiringSoon && (
-              <div className="flex items-start gap-2 p-3 bg-amber-50 rounded-lg text-sm text-amber-700">
-                <AlertTriangle className="w-4 h-4 flex-shrink-0 mt-0.5" />
-                <div>
-                  <p className="font-medium">Token expiring soon</p>
-                  <p className="text-amber-600">
-                    Your access token will expire in {formatTimeRemaining(account.tokenExpiresAt)}.
-                    Refresh it to maintain publishing access.
-                  </p>
-                </div>
-              </div>
-            )}
-
-            {/* Profile Link & Actions */}
-            <div className="flex flex-wrap gap-2">
-              <a
-                href={`https://instagram.com/${account.username}`}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="inline-flex items-center gap-1 text-sm text-blue-600 hover:text-blue-700"
-              >
-                View profile
-                <ExternalLink className="w-3 h-3" />
-              </a>
-            </div>
-
-            {/* Actions */}
-            <div className="flex flex-wrap gap-2 pt-2 border-t border-gray-100">
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={handleRefreshToken}
-                disabled={isRefreshingToken}
-              >
-                {isRefreshingToken ? (
-                  <>
-                    <Loader2 className="w-4 h-4 mr-1 animate-spin" />
-                    Refreshing...
-                  </>
-                ) : (
-                  <>
-                    <RefreshCw className="w-4 h-4 mr-1" />
-                    Refresh Token
-                  </>
-                )}
-              </Button>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={refreshStatus}
-                disabled={isLoading}
-              >
-                Refresh Status
-              </Button>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => setShowDisconnectConfirm(true)}
-                className="text-red-600 hover:text-red-700 hover:bg-red-50"
-              >
-                <LogOut className="w-4 h-4 mr-1" />
-                Disconnect
-              </Button>
-            </div>
-
-            {/* Error Message (for refresh or other actions) */}
-            {error && (
-              <div className="flex items-start gap-2 p-3 bg-red-50 rounded-lg text-sm text-red-700 animate-in fade-in slide-in-from-top-1">
-                <AlertTriangle className="w-4 h-4 flex-shrink-0 mt-0.5" />
-                <p>{error}</p>
-              </div>
-            )}
+            {/* Connect Another Account Button */}
+            <Button
+              variant="outline"
+              onClick={handleConnect}
+              className="w-full"
+            >
+              <Plus className="w-4 h-4 mr-2" />
+              Connect Another Account
+            </Button>
           </div>
         ) : (
           <div className="space-y-4">
@@ -275,13 +336,6 @@ export function InstagramSettings({ onConnectionChange }: InstagramSettingsProps
                 </p>
               </div>
             </div>
-
-            {error && (
-              <div className="flex items-start gap-2 p-3 bg-red-50 rounded-lg text-sm text-red-700">
-                <AlertTriangle className="w-4 h-4 flex-shrink-0 mt-0.5" />
-                <p>{error}</p>
-              </div>
-            )}
 
             {/* Requirements Info */}
             <div className="p-3 bg-blue-50 rounded-lg">
@@ -311,7 +365,10 @@ export function InstagramSettings({ onConnectionChange }: InstagramSettingsProps
               </a>
             </div>
 
-            <Button onClick={handleConnect} className="w-full bg-gradient-to-r from-purple-500 to-pink-500 hover:from-purple-600 hover:to-pink-600">
+            <Button
+              onClick={handleConnect}
+              className="w-full bg-gradient-to-r from-purple-500 to-pink-500 hover:from-purple-600 hover:to-pink-600"
+            >
               <Instagram className="w-4 h-4 mr-2" />
               Connect Instagram
             </Button>
@@ -320,18 +377,18 @@ export function InstagramSettings({ onConnectionChange }: InstagramSettingsProps
       </div>
 
       {/* Publishing Stats (only if connected) */}
-      {isConnected && rateLimit && (
+      {isConnected && activeAccount?.rateLimit && (
         <div className="p-4 bg-white border border-gray-200 rounded-lg">
           <h3 className="text-sm font-medium text-gray-900 mb-4 flex items-center gap-2">
             <TrendingUp className="w-4 h-4" />
-            Publishing Statistics
+            Publishing Statistics ({activeAccount.username})
           </h3>
 
           <div className="space-y-3">
             <div className="flex items-center justify-between text-sm">
               <span className="text-gray-600">Posts today</span>
               <span className="text-gray-900 font-medium">
-                {rateLimit.used} / 25
+                {activeAccount.rateLimit.used} / 25
               </span>
             </div>
 
@@ -339,20 +396,20 @@ export function InstagramSettings({ onConnectionChange }: InstagramSettingsProps
               <div
                 className={cn(
                   "h-full rounded-full transition-all",
-                  rateLimitPercentage > 90
+                  (activeAccount.rateLimit.used / 25) * 100 > 90
                     ? "bg-red-500"
-                    : rateLimitPercentage > 70
+                    : (activeAccount.rateLimit.used / 25) * 100 > 70
                     ? "bg-amber-500"
                     : "bg-gradient-to-r from-purple-500 to-pink-500"
                 )}
-                style={{ width: `${rateLimitPercentage}%` }}
+                style={{ width: `${Math.min((activeAccount.rateLimit.used / 25) * 100, 100)}%` }}
               />
             </div>
 
             <div className="flex items-center justify-between text-xs text-gray-500">
-              <span>{rateLimit.remaining} remaining</span>
+              <span>{activeAccount.rateLimit.remaining} remaining</span>
               <span>
-                Resets: {new Date(rateLimit.resetsAt).toLocaleTimeString("es-ES", {
+                Resets: {new Date(activeAccount.rateLimit.resetsAt).toLocaleTimeString("es-ES", {
                   hour: "2-digit",
                   minute: "2-digit",
                 })}
@@ -395,31 +452,31 @@ export function InstagramSettings({ onConnectionChange }: InstagramSettingsProps
       )}
 
       {/* Disconnect Confirmation Modal */}
-      {showDisconnectConfirm && (
+      {disconnectConfirm && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50">
           <div className="bg-white rounded-lg shadow-xl max-w-md w-full p-6">
             <h3 className="text-lg font-semibold text-gray-900 mb-2">
-              Disconnect Instagram?
+              Disconnect @{disconnectConfirm.username}?
             </h3>
             <p className="text-sm text-gray-600 mb-4">
-              This will remove the connection to your Instagram account. You won&apos;t
-              be able to publish posts until you reconnect. Your published posts will
-              remain on Instagram.
+              This will remove the connection to this Instagram account. You won&apos;t
+              be able to publish posts to this account until you reconnect. Published
+              posts will remain on Instagram.
             </p>
             <div className="flex justify-end gap-2">
               <Button
                 variant="outline"
-                onClick={() => setShowDisconnectConfirm(false)}
-                disabled={isDisconnecting}
+                onClick={() => setDisconnectConfirm(null)}
+                disabled={!!isDisconnecting}
               >
                 Cancel
               </Button>
               <Button
                 variant="danger"
-                onClick={handleDisconnect}
-                disabled={isDisconnecting}
+                onClick={() => handleDisconnect(disconnectConfirm.accountId)}
+                disabled={!!isDisconnecting}
               >
-                {isDisconnecting ? (
+                {isDisconnecting === disconnectConfirm.accountId ? (
                   <>
                     <Loader2 className="w-4 h-4 mr-2 animate-spin" />
                     Disconnecting...

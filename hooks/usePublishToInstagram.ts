@@ -39,7 +39,7 @@ interface UsePublishToInstagramReturn {
   progress: PublishingProgress;
   error: PublishError | null;
   result: PublishedResult | null;
-  publish: (postId: string) => Promise<PublishedResult | null>;
+  publish: (postId: string, accountId?: string) => Promise<PublishedResult | null>;
   reset: () => void;
 }
 
@@ -85,7 +85,7 @@ export function usePublishToInstagram(): UsePublishToInstagramReturn {
   }, []);
 
   const publish = useCallback(
-    async (postId: string): Promise<PublishedResult | null> => {
+    async (postId: string, accountId?: string): Promise<PublishedResult | null> => {
       setIsPublishing(true);
       setError(null);
       setResult(null);
@@ -98,7 +98,7 @@ export function usePublishToInstagram(): UsePublishToInstagramReturn {
           headers: {
             "Content-Type": "application/json",
           },
-          body: JSON.stringify({ postId }),
+          body: JSON.stringify({ postId, accountId }),
         });
 
         const data = await response.json();

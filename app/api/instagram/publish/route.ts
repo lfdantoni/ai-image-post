@@ -26,12 +26,14 @@ export const dynamic = "force-dynamic";
 // Request validation schemas
 const publishSingleSchema = z.object({
   postId: z.string(),
+  accountId: z.string().optional(), // Optional: specific account to publish to
   caption: z.string().optional().default(""),
   hashtags: z.array(z.string()).optional().default([]),
 });
 
 const publishCarouselSchema = z.object({
   postId: z.string(),
+  accountId: z.string().optional(), // Optional: specific account to publish to
   caption: z.string().optional().default(""),
   hashtags: z.array(z.string()).optional().default([]),
 });
@@ -50,10 +52,60 @@ export async function POST(request: NextRequest) {
 
     const userId = session.user.id;
 
-    // Step 2: Get the user's Instagram account
-    const instagramAccount = await prisma.instagramAccount.findUnique({
-      where: { userId },
-    });
+    // Step 2: Parse request body early to get accountId
+    const body = await request.json();
+    const parsed = publishSingleSchema.safeParse(body);
+
+    if (!parsed.success) {
+      return NextResponse.json(
+        {
+          success: false,
+          error: {
+            code: "INVALID_REQUEST",
+            message: "Invalid request body",
+            details: parsed.error.errors,
+          },
+        },
+        { status: 400 }
+      );
+    }
+
+    const { postId, accountId, caption, hashtags } = parsed.data;
+
+    // Step 3: Get the user's Instagram account
+    let instagramAccount;
+
+    if (accountId) {
+      // Use specified account
+      instagramAccount = await prisma.instagramAccount.findFirst({
+        where: { id: accountId, userId },
+      });
+
+      if (!instagramAccount) {
+        return NextResponse.json(
+          {
+            success: false,
+            error: {
+              code: "ACCOUNT_NOT_FOUND",
+              message: "Instagram account not found or doesn't belong to you.",
+            },
+          },
+          { status: 404 }
+        );
+      }
+    } else {
+      // Use default account
+      instagramAccount = await prisma.instagramAccount.findFirst({
+        where: { userId, isDefault: true },
+      });
+
+      // Fallback to any account if no default set
+      if (!instagramAccount) {
+        instagramAccount = await prisma.instagramAccount.findFirst({
+          where: { userId },
+        });
+      }
+    }
 
     if (!instagramAccount) {
       return NextResponse.json(
@@ -90,7 +142,7 @@ export async function POST(request: NextRequest) {
     if (instagramAccount.rateLimitResetAt && instagramAccount.rateLimitResetAt <= now) {
       postsToday = 0;
       await prisma.instagramAccount.update({
-        where: { userId },
+        where: { id: instagramAccount.id },
         data: {
           postsPublishedToday: 0,
           rateLimitResetAt: new Date(now.getTime() + 24 * 60 * 60 * 1000),
@@ -111,27 +163,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Step 5: Parse and validate request body
-    const body = await request.json();
-    const parsed = publishSingleSchema.safeParse(body);
-
-    if (!parsed.success) {
-      return NextResponse.json(
-        {
-          success: false,
-          error: {
-            code: "INVALID_REQUEST",
-            message: "Invalid request body",
-            details: parsed.error.errors,
-          },
-        },
-        { status: 400 }
-      );
-    }
-
-    const { postId, caption, hashtags } = parsed.data;
-
-    // Step 6: Get the post with images
+    // Step 5: Get the post with images
     const post = await prisma.post.findUnique({
       where: { id: postId, userId },
       include: {
@@ -312,6 +344,7 @@ export async function POST(request: NextRequest) {
         data: {
           userId,
           instagramAccountId: instagramAccount.id,
+          instagramUserId: instagramAccount.instagramUserId,
           postId,
           instagramMediaId: result.mediaId,
           permalink: result.permalink,
@@ -326,7 +359,7 @@ export async function POST(request: NextRequest) {
       }),
       // Update rate limit counter
       prisma.instagramAccount.update({
-        where: { userId },
+        where: { id: instagramAccount.id },
         data: {
           postsPublishedToday: postsToday + 1,
           lastSyncAt: new Date(),

@@ -265,7 +265,7 @@ async function syncMetricsJob(): Promise<JobResult> {
     // Group posts by account to minimize service instantiation
     const postsByAccount = new Map<string, typeof postsToSync>();
     for (const post of postsToSync) {
-      const accountId = post.instagramAccountId;
+      const accountId = post.instagramAccountId || '';
       if (!postsByAccount.has(accountId)) {
         postsByAccount.set(accountId, []);
       }
@@ -274,6 +274,11 @@ async function syncMetricsJob(): Promise<JobResult> {
 
     for (const [accountId, posts] of postsByAccount) {
       const account = posts[0].instagramAccount;
+
+      if (!account) {
+        console.log(`[${jobName}] Skipping account @${accountId} - account not found`);
+        continue;
+      }
 
       // Skip if token is expired
       if (account.tokenExpiresAt < new Date()) {

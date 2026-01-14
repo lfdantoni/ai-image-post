@@ -1,4 +1,4 @@
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import { InstagramAPIService, InstagramAPIError } from "@/lib/instagram-api";
@@ -17,8 +17,10 @@ const FACEBOOK_APP_SECRET = process.env.FACEBOOK_APP_SECRET!;
  * - Valid for 60 days
  * - Can be refreshed after 24 hours of being issued
  * - Should be refreshed when close to expiration (< 7 days)
+ *
+ * Body: { accountId?: string } - Optional: specific account to refresh
  */
-export async function POST() {
+export async function POST(request: NextRequest) {
   try {
     // Check configuration
     if (!FACEBOOK_APP_ID || !FACEBOOK_APP_SECRET) {
@@ -36,10 +38,38 @@ export async function POST() {
 
     const userId = session.user.id;
 
+    // Parse optional accountId from body
+    const body = await request.json().catch(() => ({}));
+    const { accountId } = body as { accountId?: string };
+
     // Get the user's Instagram account
-    const instagramAccount = await prisma.instagramAccount.findUnique({
-      where: { userId },
-    });
+    let instagramAccount;
+
+    if (accountId) {
+      // Refresh specific account
+      instagramAccount = await prisma.instagramAccount.findFirst({
+        where: { id: accountId, userId },
+      });
+
+      if (!instagramAccount) {
+        return NextResponse.json(
+          { error: "Account not found" },
+          { status: 404 }
+        );
+      }
+    } else {
+      // Refresh default account
+      instagramAccount = await prisma.instagramAccount.findFirst({
+        where: { userId, isDefault: true },
+      });
+
+      // Fallback to any account if no default
+      if (!instagramAccount) {
+        instagramAccount = await prisma.instagramAccount.findFirst({
+          where: { userId },
+        });
+      }
+    }
 
     if (!instagramAccount) {
       return NextResponse.json(
@@ -92,7 +122,7 @@ export async function POST() {
 
       // Update the token in the database
       await prisma.instagramAccount.update({
-        where: { userId },
+        where: { id: instagramAccount.id },
         data: {
           accessToken: newToken,
           tokenExpiresAt: newTokenExpiresAt,

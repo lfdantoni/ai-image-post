@@ -1,4 +1,4 @@
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 
@@ -16,6 +16,7 @@ const SCOPES = [
   "instagram_content_publish",
   "pages_show_list",
   "pages_read_engagement",
+  "business_management"
 ].join(",");
 
 /**
@@ -68,9 +69,11 @@ export async function GET() {
 
 /**
  * DELETE /api/instagram/auth
- * Disconnects the Instagram account from the user's profile
+ * Disconnects Instagram account(s) from the user's profile
+ * - With ?accountId=xxx: Disconnects specific account
+ * - Without accountId: Disconnects ALL accounts (backward compatible)
  */
-export async function DELETE() {
+export async function DELETE(request: NextRequest) {
   try {
     // Verify user is authenticated
     const session = await auth();
@@ -79,32 +82,69 @@ export async function DELETE() {
     }
 
     const userId = session.user.id;
+    const { searchParams } = new URL(request.url);
+    const accountId = searchParams.get("accountId");
 
-    // Find and delete the Instagram account
-    const instagramAccount = await prisma.instagramAccount.findUnique({
-      where: { userId },
-    });
+    if (accountId) {
+      // Delete specific account
+      const account = await prisma.instagramAccount.findFirst({
+        where: { id: accountId, userId },
+      });
 
-    if (!instagramAccount) {
-      return NextResponse.json(
-        { error: "No Instagram account connected" },
-        { status: 404 }
-      );
+      if (!account) {
+        return NextResponse.json(
+          { error: "Account not found" },
+          { status: 404 }
+        );
+      }
+
+      // If deleting the default account, set another as default
+      if (account.isDefault) {
+        const nextAccount = await prisma.instagramAccount.findFirst({
+          where: { userId, id: { not: accountId } },
+        });
+
+        if (nextAccount) {
+          await prisma.instagramAccount.update({
+            where: { id: nextAccount.id },
+            data: { isDefault: true },
+          });
+        }
+      }
+
+      await prisma.instagramAccount.delete({
+        where: { id: accountId },
+      });
+
+      return NextResponse.json({
+        success: true,
+        message: `Disconnected @${account.instagramUsername}`,
+      });
+    } else {
+      // Delete ALL accounts (backward compatible)
+      const count = await prisma.instagramAccount.count({
+        where: { userId },
+      });
+
+      if (count === 0) {
+        return NextResponse.json(
+          { error: "No Instagram account connected" },
+          { status: 404 }
+        );
+      }
+
+      await prisma.instagramAccount.deleteMany({
+        where: { userId },
+      });
+
+      // Note: We don't revoke the token on Facebook's side
+      // User can manually revoke access in their Facebook/Instagram settings
+
+      return NextResponse.json({
+        success: true,
+        message: `Disconnected ${count} Instagram account(s)`,
+      });
     }
-
-    // Delete the Instagram account record
-    // This will cascade to delete related PublishedPost records if configured
-    await prisma.instagramAccount.delete({
-      where: { userId },
-    });
-
-    // Note: We don't revoke the token on Facebook's side
-    // User can manually revoke access in their Facebook/Instagram settings
-
-    return NextResponse.json({
-      success: true,
-      message: "Instagram account disconnected successfully",
-    });
   } catch (error) {
     console.error("Error disconnecting Instagram:", error);
     return NextResponse.json(

@@ -14,6 +14,7 @@ import {
 } from "lucide-react";
 import { Button } from "@/components/ui/Button";
 import { useInstagramConnection } from "@/hooks/useInstagramConnection";
+import { AccountSelector } from "./AccountSelector";
 import {
   INSTAGRAM_IMAGE_REQUIREMENTS,
   INSTAGRAM_CAPTION_REQUIREMENTS,
@@ -41,7 +42,7 @@ interface ValidationResult {
 interface PublishConfirmationModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onConfirm: () => void;
+  onConfirm: (accountId: string) => void;
   post: PostData;
 }
 
@@ -51,16 +52,29 @@ export function PublishConfirmationModal({
   onConfirm,
   post,
 }: PublishConfirmationModalProps) {
-  const { account, rateLimit } = useInstagramConnection();
+  const { accounts, activeAccount } = useInstagramConnection();
+  const [selectedAccountId, setSelectedAccountId] = useState<string>("");
   const [aiConfirmed, setAiConfirmed] = useState(false);
   const [isValidating, setIsValidating] = useState(true);
   const [validations, setValidations] = useState<ValidationResult[]>([]);
 
-  // Run validations when modal opens
+  // Get selected account's rate limit
+  const selectedAccount = accounts.find((a) => a.id === selectedAccountId);
+  const rateLimit = selectedAccount?.rateLimit;
+
+  // Initialize selected account when modal opens
   useEffect(() => {
-    if (isOpen) {
+    if (isOpen && accounts.length > 0) {
+      // Use active account (default) or first account
+      const defaultAccount = activeAccount || accounts[0];
+      setSelectedAccountId(defaultAccount.id);
+    }
+  }, [isOpen, accounts, activeAccount]);
+
+  // Run validations when modal opens or account changes
+  useEffect(() => {
+    if (isOpen && selectedAccountId) {
       setIsValidating(true);
-      setAiConfirmed(false);
 
       // Simulate validation delay for UX
       const timer = setTimeout(() => {
@@ -160,7 +174,7 @@ export function PublishConfirmationModal({
 
       return () => clearTimeout(timer);
     }
-  }, [isOpen, post, rateLimit]);
+  }, [isOpen, post, rateLimit, selectedAccountId]);
 
   const allValid = validations.every((v) => v.isValid);
   const canPublish = allValid && aiConfirmed;
@@ -186,33 +200,13 @@ export function PublishConfirmationModal({
 
         {/* Content */}
         <div className="p-4 space-y-4">
-          {/* Connected Account */}
-          <div className="p-3 bg-gray-50 rounded-lg">
-            <p className="text-xs text-gray-500 uppercase tracking-wide mb-2">
-              Publishing to
-            </p>
-            <div className="flex items-center gap-3">
-              {account?.profilePicture ? (
-                <img
-                  src={account.profilePicture}
-                  alt={account.username}
-                  className="w-10 h-10 rounded-full"
-                />
-              ) : (
-                <div className="w-10 h-10 rounded-full bg-gradient-to-br from-purple-500 to-pink-500 flex items-center justify-center">
-                  <Instagram className="w-5 h-5 text-white" />
-                </div>
-              )}
-              <div>
-                <p className="text-sm font-medium text-gray-900">
-                  @{account?.username}
-                </p>
-                <p className="text-xs text-gray-500 capitalize">
-                  {account?.accountType.replace("_", " ")} Account
-                </p>
-              </div>
-            </div>
-          </div>
+          {/* Account Selector */}
+          <AccountSelector
+            accounts={accounts}
+            selectedAccountId={selectedAccountId}
+            onSelect={setSelectedAccountId}
+            disabled={isValidating}
+          />
 
           {/* Validations */}
           <div className="space-y-2">
@@ -287,8 +281,8 @@ export function PublishConfirmationModal({
             Cancel
           </Button>
           <Button
-            onClick={onConfirm}
-            disabled={!canPublish || isValidating}
+            onClick={() => onConfirm(selectedAccountId)}
+            disabled={!canPublish || isValidating || !selectedAccountId}
             className="gap-2 bg-gradient-to-r from-purple-500 to-pink-500 hover:from-purple-600 hover:to-pink-600"
           >
             <Instagram className="w-4 h-4" />

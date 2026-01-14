@@ -377,7 +377,7 @@ function CreatePostContent() {
     setShowPublishConfirmation(true);
   };
 
-  const handlePublishConfirm = async () => {
+  const handlePublishConfirm = async (accountId: string) => {
     setShowPublishConfirmation(false);
 
     // First save the draft if there are unsaved changes or no post ID
@@ -392,7 +392,7 @@ function CreatePostContent() {
       return;
     }
 
-    const result = await publish(postIdToPublish);
+    const result = await publish(postIdToPublish, accountId);
     if (result) {
       setShowPublishSuccess(true);
       loadDrafts(); // Refresh drafts after publishing

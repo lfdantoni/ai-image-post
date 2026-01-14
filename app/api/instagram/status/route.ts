@@ -33,9 +33,10 @@ export async function GET() {
     }
 
     const userId = session.user.id;
+    const now = new Date();
 
-    // Get the user's Instagram account
-    const instagramAccount = await prisma.instagramAccount.findUnique({
+    // Get ALL user's Instagram accounts
+    const instagramAccounts = await prisma.instagramAccount.findMany({
       where: { userId },
       select: {
         id: true,
@@ -46,91 +47,119 @@ export async function GET() {
         profilePictureUrl: true,
         accountType: true,
         followersCount: true,
+        isDefault: true,
         postsPublishedToday: true,
         rateLimitResetAt: true,
         tokenExpiresAt: true,
         connectedAt: true,
         lastSyncAt: true,
       },
+      orderBy: [
+        { isDefault: "desc" },
+        { connectedAt: "asc" },
+      ],
     });
 
-    if (!instagramAccount) {
+    if (instagramAccounts.length === 0) {
       return NextResponse.json({
         configured: true,
         connected: false,
+        accounts: [],
+        account: null,
         message: "No Instagram account connected",
       });
     }
 
-    // Check token status
-    const now = new Date();
-    const tokenExpired = instagramAccount.tokenExpiresAt < now;
-    const tokenExpiresIn = Math.max(
-      0,
-      Math.floor((instagramAccount.tokenExpiresAt.getTime() - now.getTime()) / 1000)
-    );
-    const tokenExpiresDays = Math.floor(tokenExpiresIn / (60 * 60 * 24));
-    const tokenExpiringSoon = tokenExpiresDays < 7;
-
-    // Calculate rate limit status
-    let postsToday = instagramAccount.postsPublishedToday;
-    let rateLimitResetAt = instagramAccount.rateLimitResetAt;
-
-    // Reset counter if 24 hours have passed
-    if (rateLimitResetAt && rateLimitResetAt <= now) {
-      postsToday = 0;
-      rateLimitResetAt = new Date(now.getTime() + 24 * 60 * 60 * 1000);
-
-      // Update in database
-      await prisma.instagramAccount.update({
-        where: { userId },
-        data: {
-          postsPublishedToday: 0,
-          rateLimitResetAt,
-        },
-      });
-    }
-
-    const postsRemaining = Math.max(0, INSTAGRAM_RATE_LIMITS.maxPostsPerDay - postsToday);
-
-    // Get published posts count
-    const publishedPostsCount = await prisma.publishedPost.count({
+    // Get published posts count per account
+    const publishedPostsCounts = await prisma.publishedPost.groupBy({
+      by: ["instagramAccountId"],
       where: { userId },
+      _count: true,
     });
+
+    const countsMap = new Map(
+      publishedPostsCounts.map(p => [p.instagramAccountId, p._count])
+    );
+
+    // Build response for each account
+    const accounts = await Promise.all(
+      instagramAccounts.map(async (account) => {
+        // Check token status
+        const tokenExpired = account.tokenExpiresAt < now;
+        const tokenExpiresIn = Math.max(
+          0,
+          Math.floor((account.tokenExpiresAt.getTime() - now.getTime()) / 1000)
+        );
+        const tokenExpiresDays = Math.floor(tokenExpiresIn / (60 * 60 * 24));
+        const tokenExpiringSoon = tokenExpiresDays < 7;
+
+        // Calculate rate limit status
+        let postsToday = account.postsPublishedToday;
+        let rateLimitResetAt = account.rateLimitResetAt;
+
+        // Reset counter if 24 hours have passed
+        if (rateLimitResetAt && rateLimitResetAt <= now) {
+          postsToday = 0;
+          rateLimitResetAt = new Date(now.getTime() + 24 * 60 * 60 * 1000);
+
+          // Update in database
+          await prisma.instagramAccount.update({
+            where: { id: account.id },
+            data: {
+              postsPublishedToday: 0,
+              rateLimitResetAt,
+            },
+          });
+        }
+
+        const postsRemaining = Math.max(0, INSTAGRAM_RATE_LIMITS.maxPostsPerDay - postsToday);
+
+        return {
+          id: account.id,
+          instagramUserId: account.instagramUserId,
+          username: account.instagramUsername,
+          profilePictureUrl: account.profilePictureUrl,
+          accountType: account.accountType,
+          followersCount: account.followersCount,
+          isDefault: account.isDefault,
+          facebookPage: {
+            id: account.facebookPageId,
+            name: account.facebookPageName,
+          },
+          token: {
+            expired: tokenExpired,
+            expiringSoon: tokenExpiringSoon,
+            expiresAt: account.tokenExpiresAt,
+            expiresInDays: tokenExpiresDays,
+          },
+          rateLimit: {
+            postsToday,
+            postsRemaining,
+            limit: INSTAGRAM_RATE_LIMITS.maxPostsPerDay,
+            resetsAt: rateLimitResetAt,
+            percentUsed: Math.round((postsToday / INSTAGRAM_RATE_LIMITS.maxPostsPerDay) * 100),
+          },
+          stats: {
+            publishedPostsCount: countsMap.get(account.id) || 0,
+            connectedAt: account.connectedAt,
+            lastSyncAt: account.lastSyncAt,
+          },
+        };
+      })
+    );
+
+    // Find default account for backward compatibility
+    const defaultAccount = accounts.find(a => a.isDefault) || accounts[0];
 
     return NextResponse.json({
       configured: true,
       connected: true,
-      account: {
-        id: instagramAccount.id,
-        instagramUserId: instagramAccount.instagramUserId,
-        username: instagramAccount.instagramUsername,
-        profilePictureUrl: instagramAccount.profilePictureUrl,
-        accountType: instagramAccount.accountType,
-        followersCount: instagramAccount.followersCount,
-        facebookPage: {
-          id: instagramAccount.facebookPageId,
-          name: instagramAccount.facebookPageName,
-        },
-      },
-      token: {
-        expired: tokenExpired,
-        expiringSoon: tokenExpiringSoon,
-        expiresAt: instagramAccount.tokenExpiresAt,
-        expiresInDays: tokenExpiresDays,
-      },
-      rateLimit: {
-        postsToday,
-        postsRemaining,
-        limit: INSTAGRAM_RATE_LIMITS.maxPostsPerDay,
-        resetsAt: rateLimitResetAt,
-        percentUsed: Math.round((postsToday / INSTAGRAM_RATE_LIMITS.maxPostsPerDay) * 100),
-      },
-      stats: {
-        publishedPostsCount,
-        connectedAt: instagramAccount.connectedAt,
-        lastSyncAt: instagramAccount.lastSyncAt,
-      },
+      accounts,
+      // Backward compatibility: single account object
+      account: defaultAccount,
+      token: defaultAccount.token,
+      rateLimit: defaultAccount.rateLimit,
+      stats: defaultAccount.stats,
     });
   } catch (error) {
     console.error("Error checking Instagram status:", error);

@@ -53,7 +53,7 @@ model User {
   driveSettings         Json?      // { autoSync, backupOriginals, includeMetadataJson, folderOrganization }
 
   // Instagram
-  instagramAccount      InstagramAccount?
+  instagramAccounts     InstagramAccount[]
   publishedPosts        PublishedPost[]
 
   createdAt     DateTime  @default(now())
@@ -213,7 +213,7 @@ model ExportLog {
 
 model InstagramAccount {
   id                      String    @id @default(cuid())
-  userId                  String    @unique
+  userId                  String
   user                    User      @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   // Identificadores
@@ -230,6 +230,7 @@ model InstagramAccount {
   profilePictureUrl       String?
   accountType             String    // "business" | "creator"
   followersCount          Int?
+  isDefault               Boolean   @default(false)
 
   // Rate limiting
   postsPublishedToday     Int       @default(0)
@@ -242,6 +243,7 @@ model InstagramAccount {
   // Relaciones
   publishedPosts          PublishedPost[]
 
+  @@unique([userId, instagramUserId])
   @@index([userId])
 }
 
@@ -251,8 +253,9 @@ model PublishedPost {
   // Relaciones
   userId                  String
   user                    User      @relation(fields: [userId], references: [id])
-  instagramAccountId      String
-  instagramAccount        InstagramAccount @relation(fields: [instagramAccountId], references: [id])
+  instagramAccountId      String?
+  instagramAccount        InstagramAccount? @relation(fields: [instagramAccountId], references: [id], onDelete: SetNull)
+  instagramUserId         String?   // Instagram user ID for backward compatibility
   postId                  String?   @unique  // Post de AIGram
   post                    Post?     @relation(fields: [postId], references: [id], onDelete: SetNull)
 

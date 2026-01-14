@@ -89,7 +89,18 @@ export async function GET(request: NextRequest) {
 
     const shortLivedToken = tokenData.access_token;
 
-    // Step 2: Exchange short-lived token for long-lived token
+    // Step 2: Get Facebook Pages FIRST with short-lived token
+    // This ensures we get all pages that were granted permissions
+    const pages = await InstagramAPIService.getUserPages(shortLivedToken);
+
+    if (pages.length === 0) {
+      return NextResponse.redirect(
+        `${settingsUrl}?instagram_error=No+Facebook+Pages+found.+Please+create+a+Facebook+Page+first.`
+      );
+    }
+
+    // Step 3: Exchange short-lived token for long-lived token
+    // Use the long-lived token for future operations
     const { accessToken: longLivedToken, expiresIn } =
       await InstagramAPIService.exchangeForLongLivedToken(
         shortLivedToken,
@@ -102,18 +113,21 @@ export async function GET(request: NextRequest) {
     const expiresInSeconds = typeof expiresIn === "number" ? expiresIn : 60 * 24 * 60 * 60;
     const tokenExpiresAt = new Date(Date.now() + expiresInSeconds * 1000);
 
-    // Step 3: Get Facebook Pages for the user
-    const pages = await InstagramAPIService.getUserPages(longLivedToken);
 
-    if (pages.length === 0) {
-      return NextResponse.redirect(
-        `${settingsUrl}?instagram_error=No+Facebook+Pages+found.+Please+create+a+Facebook+Page+first.`
-      );
+    // Step 4: Find ALL Instagram Business Accounts connected to pages
+    interface ConnectedAccount {
+      igAccount: { id: string; username: string };
+      page: { id: string; name: string; accessToken: string };
+      profile: {
+        id: string;
+        username: string;
+        profilePictureUrl?: string;
+        followersCount?: number;
+        accountType: string;
+      };
     }
 
-    // Step 4: Find Instagram Business Account connected to any of the pages
-    let instagramAccount: { id: string; username: string } | null = null;
-    let connectedPage: { id: string; name: string; accessToken: string } | null = null;
+    const connectedAccounts: ConnectedAccount[] = [];
 
     for (const page of pages) {
       const igAccount = await InstagramAPIService.getInstagramAccountForPage(
@@ -122,77 +136,94 @@ export async function GET(request: NextRequest) {
       );
 
       if (igAccount) {
-        instagramAccount = igAccount;
-        connectedPage = page;
-        break;
+        // Step 5: Get profile information for each account
+        const instagramService = new InstagramAPIService(
+          page.accessToken,
+          igAccount.id
+        );
+
+        let profile;
+        try {
+          profile = await instagramService.getUserProfile();
+        } catch (err) {
+          console.error(`Error fetching Instagram profile for ${igAccount.username}:`, err);
+          profile = {
+            id: igAccount.id,
+            username: igAccount.username,
+            profilePictureUrl: undefined,
+            followersCount: undefined,
+            accountType: "business",
+          };
+        }
+
+        connectedAccounts.push({
+          igAccount,
+          page,
+          profile,
+        });
       }
     }
 
-    if (!instagramAccount || !connectedPage) {
+    if (connectedAccounts.length === 0) {
       return NextResponse.redirect(
         `${settingsUrl}?instagram_error=No+Instagram+Business+account+found.+Please+connect+an+Instagram+Business+or+Creator+account+to+your+Facebook+Page.`
       );
     }
 
-    // Step 5: Get additional profile information
-    const instagramService = new InstagramAPIService(
-      connectedPage.accessToken,
-      instagramAccount.id
-    );
-
-    let profile;
-    try {
-      profile = await instagramService.getUserProfile();
-    } catch (err) {
-      console.error("Error fetching Instagram profile:", err);
-      // Continue with basic info if profile fetch fails
-      profile = {
-        id: instagramAccount.id,
-        username: instagramAccount.username,
-        profilePictureUrl: undefined,
-        followersCount: undefined,
-        accountType: "business",
-      };
-    }
-
-    // Step 6: Save or update Instagram account in database
-    await prisma.instagramAccount.upsert({
-      where: { userId },
-      create: {
-        userId,
-        instagramUserId: instagramAccount.id,
-        instagramUsername: profile.username,
-        facebookPageId: connectedPage.id,
-        facebookPageName: connectedPage.name,
-        accessToken: connectedPage.accessToken,
-        tokenExpiresAt,
-        profilePictureUrl: profile.profilePictureUrl,
-        accountType: profile.accountType || "business",
-        followersCount: profile.followersCount,
-        postsPublishedToday: 0,
-        rateLimitResetAt: new Date(Date.now() + 24 * 60 * 60 * 1000), // 24 hours from now
-        connectedAt: new Date(),
-        lastSyncAt: new Date(),
-      },
-      update: {
-        instagramUserId: instagramAccount.id,
-        instagramUsername: profile.username,
-        facebookPageId: connectedPage.id,
-        facebookPageName: connectedPage.name,
-        accessToken: connectedPage.accessToken,
-        tokenExpiresAt,
-        profilePictureUrl: profile.profilePictureUrl,
-        accountType: profile.accountType || "business",
-        followersCount: profile.followersCount,
-        connectedAt: new Date(),
-        lastSyncAt: new Date(),
-      },
+    // Step 6: Check if user has any existing default account
+    const existingDefault = await prisma.instagramAccount.findFirst({
+      where: { userId, isDefault: true },
     });
 
+    // Step 7: Save or update ALL Instagram accounts in database
+    for (let i = 0; i < connectedAccounts.length; i++) {
+      const { igAccount, page, profile } = connectedAccounts[i];
+      // Set first account as default only if no default exists
+      const isDefault = !existingDefault && i === 0;
+
+      await prisma.instagramAccount.upsert({
+        where: {
+          userId_instagramUserId: {
+            userId,
+            instagramUserId: igAccount.id,
+          },
+        },
+        create: {
+          userId,
+          instagramUserId: igAccount.id,
+          instagramUsername: profile.username,
+          facebookPageId: page.id,
+          facebookPageName: page.name,
+          accessToken: page.accessToken,
+          tokenExpiresAt,
+          profilePictureUrl: profile.profilePictureUrl,
+          accountType: profile.accountType || "business",
+          followersCount: profile.followersCount,
+          isDefault,
+          postsPublishedToday: 0,
+          rateLimitResetAt: new Date(Date.now() + 24 * 60 * 60 * 1000),
+          connectedAt: new Date(),
+          lastSyncAt: new Date(),
+        },
+        update: {
+          instagramUsername: profile.username,
+          facebookPageName: page.name,
+          accessToken: page.accessToken,
+          tokenExpiresAt,
+          profilePictureUrl: profile.profilePictureUrl,
+          accountType: profile.accountType || "business",
+          followersCount: profile.followersCount,
+          lastSyncAt: new Date(),
+        },
+      });
+    }
+
     // Success! Redirect to settings with success message
-    return NextResponse.redirect(
-      `${settingsUrl}?instagram_success=Connected+as+@${encodeURIComponent(profile.username)}`
-    );
+    const usernames = connectedAccounts.map(a => `@${a.profile.username}`).join(", ");
+    const message = connectedAccounts.length === 1
+      ? `Connected+as+${encodeURIComponent(usernames)}`
+      : `Connected+${connectedAccounts.length}+accounts:+${encodeURIComponent(usernames)}`;
+    return NextResponse.redirect(`${settingsUrl}?instagram_success=${message}`);
   } catch (err) {
     console.error("Error in Instagram OAuth callback:", err);
 
