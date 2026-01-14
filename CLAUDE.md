@@ -59,6 +59,7 @@ npm run db:studio    # Open Prisma Studio GUI
 - `@dnd-kit/core`, `@dnd-kit/sortable` - Drag & drop for grid/carousel reordering
 - `react-swipeable` - Touch swipe support for carousel
 - `copy-to-clipboard` - Clipboard functionality
+- `node-cron` - Cron job scheduling for background tasks
 
 ### Instagram Aspect Ratios
 Defined in `lib/instagram-formats.ts`:
@@ -71,10 +72,12 @@ Defined in `lib/instagram-formats.ts`:
 - `User` - Auth.js user with Google OAuth, Drive connection settings
 - `Image` - Cloudinary data, dimensions, AI metadata, Drive export info
 - `Tag` - Many-to-many with images for organization
-- `Post` - Instagram post draft with caption, hashtags, and status (DRAFT, READY, SCHEDULED, PUBLISHED)
+- `Post` - Instagram post draft with caption, hashtags, and status (DRAFT, READY, SCHEDULED, PUBLISHED, FAILED)
 - `PostImage` - Many-to-many between Post and Image with ordering for carousels
 - `HashtagGroup` - Saved hashtag collections for quick reuse
 - `ExportLog` - Log of image exports (destination, options, file size)
+- `InstagramAccount` - Connected Instagram Business/Creator accounts with tokens and rate limits
+- `PublishedPost` - Published Instagram posts with metrics (likes, comments, reach, impressions, saved)
 
 ### Instagram Preview (Phase 2)
 Components in `components/preview/`:
@@ -185,6 +188,85 @@ Mi Drive/
 - Include metadata JSON: caption, hashtags, AI info
 - Destination: download or Google Drive
 
+### Instagram Publishing (Phase 4)
+
+**Services** (`lib/`):
+- `instagram-api.ts` - InstagramAPIService class for Graph API operations (publish, metrics, tokens)
+- `instagram-validation.ts` - Content validation for Instagram requirements
+- `instagram-errors.ts` - Comprehensive error mapping and handling
+
+**Authentication Flow**:
+- Facebook OAuth with Instagram Business/Creator scopes
+- Required scopes: `instagram_basic`, `instagram_content_publish`, `pages_show_list`, `pages_read_engagement`, `business_management`
+- Long-lived tokens (60 days) with automatic refresh via cron job
+- Multiple Instagram accounts supported per user
+
+**Publishing Flow**:
+1. Create media container(s) via Graph API
+2. Poll container status until FINISHED
+3. Publish container to Instagram
+4. Get permalink and save to PublishedPost
+5. Update rate limit counters
+
+**API Routes**:
+- `GET /api/instagram/auth` - Initiate Facebook OAuth flow
+- `GET /api/instagram/auth/callback` - Handle OAuth callback, exchange tokens
+- `DELETE /api/instagram/auth` - Disconnect Instagram account(s)
+- `POST /api/instagram/auth/refresh` - Manually refresh access token
+- `GET /api/instagram/status` - Get connection status and rate limits
+- `POST /api/instagram/publish` - Publish post to Instagram
+- `GET /api/instagram/posts` - List published posts with metrics
+- `GET /api/instagram/posts/[id]` - Get single published post details
+- `POST /api/instagram/posts/[id]/sync` - Sync metrics for a post
+- `POST /api/instagram/posts/sync-all` - Sync metrics for all recent posts
+- `PUT /api/instagram/accounts/[id]/default` - Set default account
+
+**Components** (`components/instagram/`):
+- `AccountSelector` - Select Instagram account for publishing
+- `PublishToInstagramButton` - Trigger publish flow
+- `PublishConfirmationModal` - Confirm before publishing
+- `PublishProgressModal` - Show publishing progress
+- `PublishSuccessModal` - Show success with permalink
+- `PublishedPostCard` - Display published post with metrics
+- `PublishedPostsSection` - List of published posts
+- `PublishedPostDetail` - Detailed view with insights
+
+**Hooks**:
+- `hooks/useInstagramConnection.ts` - Connection status, accounts, connect/disconnect
+- `hooks/usePublishToInstagram.ts` - Publish flow with progress tracking
+
+**Error Handling**:
+- Comprehensive error mapping for 50+ Instagram API error codes
+- Error categories: AUTH, RATE_LIMIT, PERMISSION, MEDIA, VALIDATION, SERVER, NETWORK
+- Automatic retry with exponential backoff for transient errors
+- User-friendly error messages with recovery actions
+
+**Rate Limits**:
+- 25 posts per day per account (tracked in database)
+- Automatic reset via cron job
+- Pre-publish validation prevents exceeding limits
+
+### Cron Jobs
+
+**Scheduler** (`lib/cron/`):
+- `scheduler.ts` - Node-cron based job scheduler
+- `index.ts` - Exports for scheduler control
+
+**Jobs**:
+| Job | Schedule | Description |
+|-----|----------|-------------|
+| `refresh-tokens` | Daily 3:00 AM | Refresh Instagram tokens expiring within 7 days |
+| `reset-rate-limits` | Every hour | Reset daily post counters when 24h passed |
+| `sync-metrics` | Every 6 hours | Update likes, comments, reach for recent posts |
+
+**API Routes**:
+- `GET /api/cron` - Get scheduler status
+- `POST /api/cron` - Manage scheduler (actions: `run`, `start`, `stop`)
+
+**Configuration**:
+- `CRON_TIMEZONE` - Timezone for job scheduling (default: America/New_York)
+- `CRON_AUTO_START` - Auto-start scheduler on server boot (default: false)
+
 ## Environment Variables
 
 Required in `.env.local` (see `.env.example`):
@@ -208,3 +290,13 @@ Required in `.env.local` (see `.env.example`):
 **Google Drive** (Phase 3):
 - `GOOGLE_DRIVE_FOLDER_NAME` (optional, default: AIImagePost) - Root folder name in Drive
 - `GOOGLE_DRIVE_ENABLED` (optional, default: true) - Enable/disable Drive features
+
+**Instagram Publishing** (Phase 4):
+- `FACEBOOK_APP_ID` - Facebook App ID for Instagram Graph API
+- `FACEBOOK_APP_SECRET` - Facebook App Secret
+- `INSTAGRAM_REDIRECT_URI` - OAuth callback URL (e.g., `http://localhost:3000/api/instagram/auth/callback`)
+- `INSTAGRAM_GRAPH_API_VERSION` (optional, default: v21.0) - Graph API version
+
+**Cron Jobs**:
+- `CRON_TIMEZONE` (optional, default: America/New_York) - Timezone for job scheduling
+- `CRON_AUTO_START` (optional, default: false) - Auto-start scheduler on server boot
