@@ -15,6 +15,9 @@ WORKDIR /app
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
 
+# Asegurar que public exista (Next.js lo usa; el proyecto puede no tener la carpeta)
+RUN mkdir -p public
+
 # Prisma generate (needed for build and runtime)
 RUN npx prisma generate
 
