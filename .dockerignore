@@ -1,0 +1,52 @@
+# Dependencies
+node_modules
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.pnp
+.pnp.js
+.yarn/install-state.gz
+
+# Build
+.next
+out
+build
+dist
+
+# Git
+.git
+.gitignore
+
+# IDE / OS
+.DS_Store
+*.pem
+.idea
+.vscode
+.cursor
+
+# Env (configurar en EasyPanel)
+.env
+.env.*
+!.env.example
+
+# Docs / desarrollo
+README.md
+CLAUDE.md
+docs
+project-phases
+*.md
+
+# Tests
+coverage
+*.test.*
+*.spec.*
+
+# Prisma (solo excluir DB local; schema.prisma se copia en Dockerfile)
+prisma/*.db
+prisma/*.db-journal
+
+# Misc
+.vercel
+*.tsbuildinfo
+next-env.d.ts
+.claude
