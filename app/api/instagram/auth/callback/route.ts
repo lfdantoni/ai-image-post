@@ -159,7 +159,10 @@ export async function GET(request: NextRequest) {
         connectedAccounts.push({
           igAccount,
           page,
-          profile,
+          profile: {
+            ...profile,
+            accountType: profile.accountType ?? "business",
+          },
         });
       }
     }

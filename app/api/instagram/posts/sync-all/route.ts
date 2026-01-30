@@ -42,9 +42,10 @@ export async function POST(request: NextRequest) {
     const dateThreshold = new Date();
     dateThreshold.setDate(dateThreshold.getDate() - days);
 
-    // Get the user's Instagram account
-    const instagramAccount = await prisma.instagramAccount.findUnique({
+    // Get the user's Instagram account (default or first)
+    const instagramAccount = await prisma.instagramAccount.findFirst({
       where: { userId },
+      orderBy: { isDefault: "desc" },
     });
 
     if (!instagramAccount) {
@@ -154,7 +155,7 @@ export async function POST(request: NextRequest) {
 
     // Update last sync time on the Instagram account
     await prisma.instagramAccount.update({
-      where: { userId },
+      where: { id: instagramAccount.id },
       data: {
         lastSyncAt: new Date(),
       },
