@@ -20,6 +20,9 @@ export const INSTAGRAM_IMAGE_REQUIREMENTS = {
     max: 1.91,  // Landscape
   },
 
+  /** Epsilon for float comparison (avoids 0.8 being rejected as 0.79999...) */
+  aspectRatioEpsilon: 1e-5,
+
   /** Dimension constraints in pixels */
   dimensions: {
     minWidth: 320,
@@ -173,7 +176,7 @@ export function validateImage(image: ImageValidationParams): {
 
   // Check dimensions
   if (image.width !== undefined && image.height !== undefined) {
-    const { dimensions, aspectRatio, optimalWidth } = INSTAGRAM_IMAGE_REQUIREMENTS;
+    const { dimensions, aspectRatio, optimalWidth, aspectRatioEpsilon } = INSTAGRAM_IMAGE_REQUIREMENTS;
 
     // Width constraints
     if (image.width < dimensions.minWidth) {
@@ -209,9 +212,9 @@ export function validateImage(image: ImageValidationParams): {
       });
     }
 
-    // Aspect ratio
+    // Aspect ratio (use epsilon to avoid floating-point rejecting exact 4:5 e.g. 0.79999... < 0.8)
     const ratio = image.width / image.height;
-    if (ratio < aspectRatio.min) {
+    if (ratio < aspectRatio.min - aspectRatioEpsilon) {
       errors.push({
         code: "ASPECT_RATIO_TOO_TALL",
         message: `Aspect ratio (${ratio.toFixed(2)}) is too tall. Minimum is ${aspectRatio.min} (4:5)`,
@@ -219,7 +222,7 @@ export function validateImage(image: ImageValidationParams): {
       });
     }
 
-    if (ratio > aspectRatio.max) {
+    if (ratio > aspectRatio.max + aspectRatioEpsilon) {
       errors.push({
         code: "ASPECT_RATIO_TOO_WIDE",
         message: `Aspect ratio (${ratio.toFixed(2)}) is too wide. Maximum is ${aspectRatio.max} (1.91:1)`,
