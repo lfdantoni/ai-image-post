@@ -20,8 +20,8 @@ export const INSTAGRAM_IMAGE_REQUIREMENTS = {
     max: 1.91,  // Landscape
   },
 
-  /** Epsilon for float comparison (avoids 0.8 being rejected as 0.79999...) */
-  aspectRatioEpsilon: 1e-5,
+  /** Epsilon for float comparison (avoids 4:5 e.g. 0.79999... being rejected; 0.001 ≈ 1px at 1080) */
+  aspectRatioEpsilon: 0.001,
 
   /** Dimension constraints in pixels */
   dimensions: {
